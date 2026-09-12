@@ -31,6 +31,7 @@ class DrawingEngine:
     """
 
     def __init__(self, width: int = 1200, height: int = 800):
+        self.mode_name = 'pure'
         self.width = width
         self.height = height
 
