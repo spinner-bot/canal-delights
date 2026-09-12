@@ -367,26 +367,18 @@ class DrawingEngine:
         align: str = 'center',
         weight: str = 'normal',
     ):
-        """绘制文字 - 使用 Tkinter Canvas 直接渲染"""
-        # 转换坐标：世界坐标 (y向上) → Canvas 坐标 (y向下)
-        canvas_y = self.height - y
+        """绘制文字"""
+        self.pen.up()
+        self.pen.goto(x, y)
+        self.pen.pencolor(rgb_to_hex(color))
 
-        # 构建字体
-        font_weight = 'bold' if weight == 'bold' else ''
-        font = (font_family, font_size, font_weight)
+        align_map = {'left': 'left', 'center': 'center', 'right': 'right'}
+        turtle_align = align_map.get(align, 'center')
 
-        # 对齐方式
-        anchor_map = {'left': 'w', 'center': 'center', 'right': 'e'}
-        anchor = anchor_map.get(align, 'center')
-
-        # 使用 Canvas 直接绘制
-        canvas = self.screen.getcanvas()
-        canvas.create_text(
-            x, canvas_y,
-            text=text,
-            font=font,
-            fill=rgb_to_hex(color),
-            anchor=anchor,
+        self.pen.write(
+            text,
+            align=turtle_align,
+            font=(font_family, font_size, weight),
         )
 
     # ============================================
