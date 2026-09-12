@@ -1,6 +1,8 @@
 import pytest
 
-from canal_delights.core.navigation import BoatPhysics, CITY_POINTS, route_point, route_tangent
+from canal_delights.core.navigation import (
+    BoatPhysics, CITY_POINTS, readable_boat_pose, route_point, route_tangent,
+)
 
 
 @pytest.mark.parametrize('index', range(5))
@@ -34,3 +36,13 @@ def test_nearby_city_only_inside_activation_radius():
 def test_route_tangent_is_normalized():
     x, y = route_tangent(.5)
     assert x * x + y * y == pytest.approx(1.0)
+
+
+def test_boat_pose_stays_upright_and_flips_after_vertical_threshold():
+    angle, flipped = readable_boat_pose((-.3, -.95))
+    assert -90 <= angle <= 90
+    assert flipped
+
+    reverse_angle, reverse_flipped = readable_boat_pose((.8, -.2), direction=-1)
+    assert -90 <= reverse_angle <= 90
+    assert reverse_flipped

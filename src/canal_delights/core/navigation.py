@@ -43,6 +43,21 @@ def route_tangent(progress: float) -> Point:
     return dx / length, dy / length
 
 
+def readable_boat_pose(tangent: Point, direction: float = 1.0,
+                       canvas_size: Point = (1200, 800)) -> tuple[float, bool]:
+    """Return an upright angle and whether the boat should be mirrored."""
+    width, height = canvas_size
+    sign = 1 if direction >= 0 else -1
+    angle = math.degrees(math.atan2(tangent[1] * sign * height,
+                                    tangent[0] * sign * width))
+    flipped = angle > 90 or angle < -90
+    if angle > 90:
+        angle -= 180
+    elif angle < -90:
+        angle += 180
+    return angle, flipped
+
+
 @dataclass
 class BoatPhysics:
     position: float = 0.0

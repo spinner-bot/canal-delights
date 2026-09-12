@@ -7,7 +7,7 @@ from canal_delights.content.scenes import FOOD_POSITIONS, SCENE_BUILDERS, get_ci
 def test_each_city_has_a_distinct_nonempty_scene(city_id):
     scene = get_city_scene(city_id, (120, 80, 60), phase=.5, gradient_steps=6)
     assert len(scene) >= 8
-    assert len(FOOD_POSITIONS[city_id]) == 2
+    assert len(FOOD_POSITIONS[city_id]) == 4
     assert all(item[0] in {'R', 'RR', 'C', 'E', 'G', 'L', 'B', 'A'} for item in scene)
 
 

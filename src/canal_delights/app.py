@@ -7,11 +7,14 @@ import math
 from .state import AppState, StateMachine, Mode
 from .core.backend import RenderMode, create_engine
 from .core.animation import AnimationClock, SceneTransition
-from .core.navigation import BoatPhysics, CITY_POINTS, ROUTE_SEGMENTS, route_point, route_tangent
+from .core.navigation import (
+    BoatPhysics, CITY_POINTS, ROUTE_SEGMENTS, readable_boat_pose,
+    route_point, route_tangent,
+)
 from .core.splash import SplashSystem
 from .core.renderer import DrawingDataParser
 from .config import linear_gradient, rgb, CANVAS_WIDTH, CANVAS_HEIGHT, CANVAS_BG
-from .content.catalog import get_city, get_food
+from .content.catalog import get_all_cities, get_city, get_food
 from .content.scenes import FOOD_POSITIONS, get_city_scene
 from .content.foods.prototype import get_food_drawing
 
@@ -28,7 +31,7 @@ class App:
         self._background_rendered = False
         self.hovered_item = None
         self.animations = AnimationClock(
-            self.engine.screen, fps=30 if self.engine.mode_name == 'accelerated' else 15,
+            self.engine.screen, fps=30 if self.engine.mode_name == 'accelerated' else 10,
         )
         self.boat = BoatPhysics()
         self.splash = SplashSystem(limit=36 if self.engine.mode_name == 'accelerated' else 10)
@@ -36,6 +39,8 @@ class App:
         self.move_direction = 0
         self.animation_phase = 0.0
         self._splash_elapsed = 0.0
+        self._pressed_nav = None
+        self.book_turn = 0.0
 
     def run(self):
         """运行应用"""
@@ -48,6 +53,7 @@ class App:
         print("  MAP:   按住 ←/→ 驾船, 靠近城市后 Enter 探索")
         print("  CITY:  ←/→ 选择美食, Enter 查看")
         print("  DETAIL: Enter 完成品鉴")
+        print("  ATLAS: ←/→ 翻页，B 打开/关闭图鉴")
         print("  Esc:   返回上一级")
         print("  H:     帮助")
         print(f"  渲染:  {self.engine.mode_name}")
@@ -63,10 +69,14 @@ class App:
         self.engine.screen.onkeyrelease(self.on_direction_release, 'Right')
         self.engine.screen.onkey(self.on_help, 'h')
         self.engine.screen.onkey(self.on_help, 'H')
+        self.engine.screen.onkey(self.on_atlas, 'b')
+        self.engine.screen.onkey(self.on_atlas, 'B')
 
         # 鼠标点击
         self.engine.screen.onclick(self.on_click)
         self.engine.on_motion(self.on_motion)
+        self.engine.on_pointer_press(self.on_pointer_press)
+        self.engine.on_pointer_release(self.on_pointer_release)
 
         self.engine.listen()
         self.render()
@@ -94,6 +104,8 @@ class App:
             self.draw_city()
         elif self.state.mode == Mode.FOOD_DETAIL:
             self.draw_food_detail()
+        elif self.state.mode == Mode.ATLAS:
+            self.draw_atlas()
         elif self.state.mode == Mode.FINALE:
             self.draw_finale()
 
@@ -125,33 +137,81 @@ class App:
             data.append(['E', [x, y, .035, .006], {'fill': rgb(237, 228, 204)}])
         self.parser.parse(data, self.bounds)
 
-    def _food_medallion(self, cx, cy, food_id, selected=False):
+    def _food_medallion(self, cx, cy, city_id, food_id, selected=False):
         """Small, recognisable food illustration used by the city selection."""
         rim = rgb(184, 134, 11) if selected else rgb(190, 180, 155)
         data = [
             ['E', [cx, cy - .065, .115, .028], {'fill': rgb(216, 205, 178)}],
             ['C', [cx, cy, .105], {'fill': rgb(250, 248, 240), 'stroke': rim, 'stroke_width': 2}],
         ]
-        golden = rgb(205, 133, 35)
-        if food_id in ('roast_duck', 'lion_head', 'west_lake_fish', 'squirrel_fish'):
-            data += [['E', [cx, cy, .073, .040], {'fill': rgb(159, 75, 37)}],
-                     ['G', [[cx + .065, cy], [cx + .10, cy + .035], [cx + .10, cy - .035]], {'fill': rgb(125, 57, 30)}],
-                     ['L', [[cx - .04, cy + .015], [cx + .04, cy + .015]], {'stroke': golden, 'stroke_width': 2}]]
-        elif food_id in ('baozi', 'soup_dumpling'):
-            data += [['C', [cx, cy, .067], {'fill': rgb(255, 248, 229), 'stroke': rgb(210, 194, 164), 'stroke_width': 1}],
-                     ['C', [cx, cy + .02, .014], {'fill': rgb(221, 195, 157)}]]
-            for offset in (-.04, -.02, .02, .04):
-                data.append(['L', [[cx, cy + .02], [cx + offset, cy - .035]], {'stroke': rgb(218, 202, 174), 'stroke_width': 1}])
-        elif food_id == 'longjing_tea':
-            data += [['RR', [cx - .055, cy - .035, .11, .07, .012], {'fill': rgb(237, 246, 223), 'stroke': rgb(102, 135, 63), 'stroke_width': 2}],
-                     ['E', [cx, cy - .005, .044, .015], {'fill': rgb(143, 180, 92)}]]
-        elif food_id == 'osmanthus_cake':
-            data += [['RR', [cx - .065, cy - .040, .13, .08, .012], {'fill': rgb(255, 237, 189), 'stroke': golden, 'stroke_width': 1}]]
-            for dx, dy in ((-.03,.01), (0,.02), (.03,-.01)):
-                data.append(['C', [cx + dx, cy + dy, .009], {'fill': rgb(226, 159, 30)}])
-        else:  # mooncake and mahua
-            data += [['C', [cx, cy, .065], {'fill': golden, 'stroke': rgb(159, 102, 28), 'stroke_width': 2}],
-                     ['RG', [cx, cy, .035, .050], {'stroke': rgb(240, 193, 79), 'stroke_width': 2}]]
+        drawing = get_food_drawing(city_id, food_id)
+        if drawing:
+            data.append(['GR', drawing, {'transform': {
+                'scale': [.52, .52], 'translate': [cx - .5, cy - .45],
+                'pivot': [.5, .45],
+            }}])
+        return data
+
+    @staticmethod
+    def _wrapped_lines(text, width=24):
+        """Wrap Chinese prose without requiring whitespace between words."""
+        return [text[index:index + width] for index in range(0, len(text), width)]
+
+    @staticmethod
+    def _inside(nx, ny, bounds):
+        x, y, width, height = bounds
+        return x <= nx <= x + width and y <= ny <= y + height
+
+    def _preview_layout(self, city_index):
+        """Place a preview beside its marker, preferring the space above it."""
+        marker_x, marker_y = CITY_POINTS[city_index]
+        width, height = .34, .19
+        x = max(.045, min(.955 - width, marker_x - width / 2))
+        above_y = marker_y + .075
+        y = above_y if above_y + height <= .95 else marker_y - height - .075
+        button = (x + .225, y + .025, .090, .050)
+        return x, y, width, height, button
+
+    @staticmethod
+    def _city_thumbnail(city_id, cx, cy, theme, phase):
+        """Small city silhouettes that avoid scaling full-scene gradients."""
+        sway = .003 * math.sin(phase * 1.5)
+        data = [
+            ['E', [cx, cy - .035, .065, .012], {'fill': rgb(183, 211, 204)}],
+            ['B', [[cx-.065,cy-.025],[cx-.025,cy-.012],[cx+.025,cy-.038],[cx+.065,cy-.020]],
+             {'stroke': rgb(112, 169, 175), 'stroke_width': 2}],
+        ]
+        if city_id == 'beijing':
+            data += [
+                ['R', [cx-.045,cy-.025,.09,.050], {'fill': rgb(174, 72, 54)}],
+                ['G', [[cx-.060,cy+.025],[cx+.060,cy+.025],[cx+.040,cy+.050],[cx-.040,cy+.050]], {'fill': theme}],
+                ['R', [cx-.010,cy-.025,.020,.035], {'fill': rgb(80, 48, 35)}],
+            ]
+        elif city_id == 'tianjin':
+            data += [
+                ['C', [cx,cy+.010,.047], {'stroke': theme, 'stroke_width': 2}],
+                ['L', [[cx-.035,cy-.025],[cx,cy+.010],[cx+.035,cy-.025]], {'stroke': theme, 'stroke_width': 2}],
+                ['L', [[cx-.047,cy+.010],[cx+.047,cy+.010]], {'stroke': theme, 'stroke_width': 1}],
+                ['L', [[cx,cy-.037],[cx,cy+.057]], {'stroke': theme, 'stroke_width': 1}],
+            ]
+        elif city_id == 'yangzhou':
+            data += [
+                ['B', [[cx-.060,cy-.025],[cx-.032,cy+.045],[cx+.010,cy+.045],[cx+.040,cy-.025]], {'stroke': rgb(210, 203, 178), 'stroke_width': 6}],
+                ['B', [[cx-.057,cy-.025],[cx-.030,cy+.037],[cx+.008,cy+.037],[cx+.037,cy-.025]], {'stroke': theme, 'stroke_width': 1}],
+                ['L', [[cx+.048,cy-.030],[cx+.048+sway,cy+.055]], {'stroke': rgb(77, 112, 67), 'stroke_width': 2}],
+            ]
+        elif city_id == 'suzhou':
+            data += [
+                ['R', [cx-.055,cy-.025,.11,.055], {'fill': rgb(237, 232, 213), 'stroke': rgb(61, 66, 65), 'stroke_width': 1}],
+                ['G', [[cx-.065,cy+.030],[cx+.065,cy+.030],[cx+.045,cy+.052],[cx-.045,cy+.052]], {'fill': rgb(61, 66, 65)}],
+                ['B', [[cx-.015,cy-.025],[cx+.010,cy+.025],[cx+.045,cy+.025],[cx+.065,cy-.025]], {'stroke': rgb(61, 66, 65), 'stroke_width': 2}],
+            ]
+        else:
+            data += [
+                ['B', [[cx-.065,cy-.005],[cx-.035,cy+.045],[cx,cy+.010],[cx+.040,cy+.050]], {'stroke': rgb(105, 145, 97), 'stroke_width': 10}],
+                ['R', [cx+.020,cy-.025,.025,.072], {'fill': rgb(190, 158, 99), 'stroke': theme, 'stroke_width': 1}],
+                ['G', [[cx+.012,cy+.047],[cx+.053,cy+.047],[cx+.043,cy+.060],[cx+.022,cy+.060]], {'fill': rgb(91, 67, 45)}],
+            ]
         return data
 
     def draw_intro(self):
@@ -194,11 +254,11 @@ class App:
         data = [
             ['R', [.034, .043, .932, .914], {'gradient': linear_gradient([
                 [rgb(239, 230, 205), 0.0], [rgb(250, 244, 225), .48], [rgb(226, 218, 192), 1.0],
-            ], angle=25, steps=18 if self.engine.mode_name == 'accelerated' else 8), 'z': -20}],
+            ], angle=25, steps=12 if self.engine.mode_name == 'accelerated' else 6), 'z': -20}],
             ['PATH', route_commands, {'stroke': rgb(94, 155, 170), 'stroke_width': 40}],
             ['PATH', route_commands, {'stroke': rgb(181, 220, 220), 'stroke_width': 27}],
             ['PATH', route_commands, {'stroke': rgb(226, 242, 235), 'stroke_width': 3}],
-            ['T', [0.5, 0.9, '运河地图'], {'font_size': 28, 'color': rgb(50, 50, 50)}],
+            ['T', [0.5, 0.9, '京杭大运河'], {'font_size': 28, 'color': rgb(50, 50, 50)}],
             ['T', [0.5, 0.845, '驾一叶轻舟，循水寻味'], {'font_size': 13, 'color': rgb(122, 101, 75)}],
         ]
 
@@ -243,9 +303,11 @@ class App:
 
         boat_x, boat_y = route_point(self.boat.position)
         tangent_x, tangent_y = route_tangent(self.boat.position)
-        boat_angle = math.degrees(math.atan2(tangent_y * CANVAS_HEIGHT, tangent_x * CANVAS_WIDTH))
-        bob = math.sin(self.animation_phase * 5) * .003
         direction = 1 if self.boat.velocity >= 0 else -1
+        boat_angle, boat_flipped = readable_boat_pose(
+            (tangent_x, tangent_y), direction, (CANVAS_WIDTH, CANVAS_HEIGHT),
+        )
+        bob = math.sin(self.animation_phase * 5) * .003
         wake_strength = min(1.0, abs(self.boat.velocity) / .12)
         tail_x = boat_x - tangent_x * direction * (.035 + .025 * wake_strength)
         tail_y = boat_y - tangent_y * direction * (.035 + .025 * wake_strength)
@@ -273,27 +335,54 @@ class App:
              {'stroke': rgb(75, 49, 33), 'stroke_width': 2}],
             ['G', [[boat_x + .002, boat_y + .055 + bob], [boat_x + .002, boat_y + .012 + bob],
                    [boat_x + .040, boat_y + .025 + bob]], {'fill': rgb(201, 48, 44)}],
-        ], {'transform': {'rotate': boat_angle, 'pivot': [boat_x, boat_y]}}])
+        ], {'transform': {
+            'scale': [-1, 1] if boat_flipped else [1, 1],
+            'rotate': boat_angle, 'pivot': [boat_x, boat_y],
+        }}])
 
         # Side controls behave like a compact physical throttle.
         left_hover = self.hovered_item == ('nav', -1)
         right_hover = self.hovered_item == ('nav', 1)
+        left_pressed = self._pressed_nav == -1
+        right_pressed = self._pressed_nav == 1
         data.extend([
-            ['RR', [.055, .39, .075, .10, .025], {'fill': rgb(139, 69, 19) if left_hover else rgb(224, 207, 170), 'stroke': rgb(164, 121, 62), 'stroke_width': 2}],
+            ['RR', [.055, .39, .075, .10, .025], {'fill': rgb(105, 57, 35) if left_pressed else (rgb(139, 69, 19) if left_hover else rgb(224, 207, 170)), 'stroke': rgb(164, 121, 62), 'stroke_width': 3 if left_pressed else 2}],
             ['T', [.092, .418, '‹'], {'font_size': 26, 'color': rgb(255, 248, 229) if left_hover else rgb(91, 63, 39)}],
-            ['RR', [.87, .39, .075, .10, .025], {'fill': rgb(139, 69, 19) if right_hover else rgb(224, 207, 170), 'stroke': rgb(164, 121, 62), 'stroke_width': 2}],
+            ['RR', [.87, .39, .075, .10, .025], {'fill': rgb(105, 57, 35) if right_pressed else (rgb(139, 69, 19) if right_hover else rgb(224, 207, 170)), 'stroke': rgb(164, 121, 62), 'stroke_width': 3 if right_pressed else 2}],
             ['T', [.907, .418, '›'], {'font_size': 26, 'color': rgb(255, 248, 229) if right_hover else rgb(91, 63, 39)}],
+            ['RR', [.81, .865, .135, .060, .018], {
+                'fill': rgb(139, 69, 19) if self.hovered_item == ('atlas', 0) else rgb(232, 218, 187),
+                'stroke': rgb(164, 121, 62), 'stroke_width': 1,
+            }],
+            ['T', [.877, .883, '翻阅图鉴'], {'font_size': 11, 'font_weight': 'bold',
+                                            'color': rgb(255, 248, 229) if self.hovered_item == ('atlas', 0) else rgb(91, 63, 39)}],
         ])
 
         if nearby_city is not None:
             city_data = get_city(nearby_city)
             explore_hover = self.hovered_item == ('explore', nearby_city)
+            card_x, card_y, card_w, card_h, explore_bounds = self._preview_layout(nearby_city)
+            marker_x, marker_y = CITY_POINTS[nearby_city]
+            card_above = card_y > marker_y
+            stem_y = card_y if card_above else card_y + card_h
             data.extend([
-                ['RR', [.59, .69, .34, .145, .025], {'fill': rgb(250, 245, 225), 'stroke': city_data['theme'], 'stroke_width': 2}],
-                ['T', [.625, .783, city_data['name']], {'font_size': 19, 'font_weight': 'bold', 'align': 'left', 'color': rgb(55, 48, 39)}],
-                ['T', [.625, .737, f"{city_data['season']} · 两道时味待寻"], {'font_size': 11, 'align': 'left', 'color': rgb(120, 105, 83)}],
-                ['RR', [.80, .713, .10, .052, .015], {'fill': city_data['theme'] if explore_hover else rgb(219, 190, 130), 'stroke': city_data['theme'], 'stroke_width': 1}],
-                ['T', [.85, .727, '探索'], {'font_size': 11, 'font_weight': 'bold', 'color': rgb(255, 250, 235) if explore_hover else rgb(75, 54, 35)}],
+                ['G', [[marker_x - .018, stem_y], [marker_x + .018, stem_y],
+                       [marker_x, marker_y + (.052 if card_above else -.052)]],
+                 {'fill': rgb(250, 245, 225), 'stroke': city_data['theme'], 'stroke_width': 1, 'z': 99}],
+                ['RR', [card_x, card_y, card_w, card_h, .022], {'fill': rgb(250, 245, 225), 'stroke': city_data['theme'], 'stroke_width': 2, 'z': 100}],
+            ])
+            # A lightweight animated silhouette avoids scaling full-scene
+            # gradients, which would be expensive in pure Turtle mode.
+            thumb_x, thumb_y = card_x + .075, card_y + .105
+            data.append(['GR', self._city_thumbnail(
+                city_data['id'], thumb_x, thumb_y, city_data['theme'], self.animation_phase,
+            ), {'z': 101}])
+            data.extend([
+                ['T', [card_x + .145, card_y + .145, city_data['name']], {'font_size': 17, 'font_weight': 'bold', 'align': 'left', 'color': rgb(55, 48, 39), 'z': 102}],
+                ['T', [card_x + .145, card_y + .112, city_data['cuisine']], {'font_size': 9, 'align': 'left', 'color': city_data['theme'], 'z': 102}],
+                ['T', [card_x + .145, card_y + .085, city_data['description'][:23] + '…'], {'font_size': 8, 'align': 'left', 'color': rgb(120, 105, 83), 'z': 102}],
+                ['RR', [*explore_bounds, .014], {'fill': city_data['theme'] if explore_hover else rgb(219, 190, 130), 'stroke': city_data['theme'], 'stroke_width': 1, 'z': 102}],
+                ['T', [explore_bounds[0] + explore_bounds[2] / 2, explore_bounds[1] + .013, '探索'], {'font_size': 10, 'font_weight': 'bold', 'color': rgb(255, 250, 235) if explore_hover else rgb(75, 54, 35), 'z': 103}],
             ])
 
         # Progress
@@ -310,32 +399,31 @@ class App:
         theme = city_data['theme']
         data = get_city_scene(
             city_data['id'], theme, self.animation_phase,
-            gradient_steps=14 if self.engine.mode_name == 'accelerated' else 6,
+            gradient_steps=10 if self.engine.mode_name == 'accelerated' else 5,
         )
         data.append(['T', [0.5, 0.86, f'{city} · 城市食景'], {
             'font_size': 30, 'font_weight': 'bold', 'color': rgb(50, 50, 50),
         }])
-        data.append(['T', [0.5, 0.815, '寻访散落在城中的两道时味'], {
+        data.append(['T', [0.5, 0.815, f"{city_data['cuisine']} · 寻访四道时味"], {
             'font_size': 11, 'color': rgb(130, 112, 85),
         }])
 
-        # 两道美食
-        for i in range(2):
-            food_data = city_data['foods'][i]
+        # 四道美食
+        for i, food_data in enumerate(city_data['foods']):
             x, y = FOOD_POSITIONS[city_data['id']][i]
 
             hovered = self.hovered_item == ('food', i)
             highlighted = i == self.state.current_food or hovered
-            medallion = self._food_medallion(x, y, food_data['id'], highlighted)
-            if hovered:
-                data.append(['GR', medallion, {'transform': {
-                    'scale': [1.08, 1.08], 'pivot': [x, y],
-                }}])
-            else:
-                data.extend(medallion)
+            medallion = self._food_medallion(
+                x, y, city_data['id'], food_data['id'], highlighted,
+            )
+            scale = .84 if hovered else .74
+            data.append(['GR', medallion, {'transform': {
+                'scale': [scale, scale], 'pivot': [x, y],
+            }}])
 
             # 美食名
-            data.append(['T', [x, y - 0.15, food_data['name']], {'font_size': 14, 'color': rgb(50, 50, 50)}])
+            data.append(['T', [x, y - 0.105, food_data['name']], {'font_size': 12, 'color': rgb(50, 50, 50)}])
             if f'{self.state.current_city}_{i}' in self.state.discovered_foods:
                 data.append(['C', [x + .075, y + .070, .023], {'fill': rgb(176, 45, 39), 'stroke': rgb(246, 220, 160), 'stroke_width': 1}])
                 data.append(['T', [x + .075, y + .061, '✓'], {'font_size': 10, 'color': rgb(255, 246, 224)}])
@@ -353,30 +441,128 @@ class App:
         city_name = city_data['name']
 
         theme = city_data['theme']
+        detail_bob = .004 * math.sin(self.animation_phase * 1.7)
         data = [
             # Upper area: illustration 3/10, introduction 7/10.
             ['RR', [.065, .53, .27, .31, .025], {'fill': rgb(250, 246, 230), 'stroke': theme, 'stroke_width': 2}],
             ['RR', [.365, .53, .57, .31, .025], {'fill': rgb(247, 240, 217), 'stroke': rgb(215, 192, 147), 'stroke_width': 1}],
             ['T', [.405, .775, f'{city_name} · {food_data["name"]}'], {'font_size': 25, 'font_weight': 'bold', 'align': 'left', 'color': rgb(52, 44, 34)}],
-            ['T', [.405, .715, f'时令  {food_data["season"]}'], {'font_size': 12, 'align': 'left', 'color': theme}],
-            ['T', [.405, .650, food_data['story']], {'font_size': 15, 'align': 'left', 'color': rgb(91, 76, 56)}],
-            ['T', [.405, .590, f'风味食材  ·  {" / ".join(food_data["ingredients"])}'], {'font_size': 11, 'align': 'left', 'color': rgb(130, 116, 91)}],
+            ['T', [.405, .727, city_data['cuisine']], {'font_size': 11, 'align': 'left', 'color': theme}],
 
             # Lower area: story occupies roughly 60% of the content height.
             ['RR', [.065, .135, .87, .35, .025], {'fill': rgb(242, 232, 203), 'stroke': rgb(204, 173, 116), 'stroke_width': 1}],
             ['T', [.105, .420, '食味小记'], {'font_size': 19, 'font_weight': 'bold', 'align': 'left', 'color': theme}],
-            ['T', [.105, .355, f'{food_data["story"]}。一席风味沿京杭大运河流转，也记录着当地人的四时日常。'], {'font_size': 13, 'align': 'left', 'color': rgb(79, 68, 53)}],
-            ['T', [.105, .300, '从选料、火候到上桌，每一道工序都藏着城市的性情与水乡的记忆。'], {'font_size': 13, 'align': 'left', 'color': rgb(79, 68, 53)}],
             ['RR', [.745, .175, .15, .065, .018], {'fill': theme if self.hovered_item == ('taste', 0) else rgb(222, 196, 142), 'stroke': theme, 'stroke_width': 1}],
             ['T', [.82, .194, '完成品鉴'], {'font_size': 12, 'font_weight': 'bold', 'color': rgb(255, 249, 234) if self.hovered_item == ('taste', 0) else rgb(75, 55, 36)}],
         ]
 
+        for index, line in enumerate(self._wrapped_lines(food_data['intro'], 25)[:3]):
+            data.append(['T', [.405, .674 - index * .043, line], {
+                'font_size': 12, 'align': 'left', 'color': rgb(91, 76, 56),
+            }])
+        for index, line in enumerate(self._wrapped_lines(food_data['story'], 38)[:4]):
+            data.append(['T', [.105, .360 - index * .048, line], {
+                'font_size': 12, 'align': 'left', 'color': rgb(79, 68, 53),
+            }])
+
         # 添加食物绘图数据
         food_drawing = get_food_drawing(city_data['id'], food_data['id'])
         data.append(['GR', food_drawing, {
-            'transform': {'scale': [.60, .60], 'translate': [-.30, .255], 'pivot': [.5, .45]},
+            'transform': {'scale': [.60, .60], 'translate': [-.30, .255 + detail_bob], 'pivot': [.5, .45]},
         }])
 
+        self.parser.parse(data, self.bounds)
+
+    def draw_atlas(self):
+        """绘制带翻页反馈的动漫风格美食图鉴。"""
+        cities = get_all_cities()
+        page = self.state.atlas_page
+        lift = .004 * math.sin(self.animation_phase * 1.4)
+        data = [
+            ['E', [.50, .135 + lift, .39, .035], {'fill': rgb(188, 169, 132)}],
+            ['RR', [.105, .17 + lift, .79, .66, .035], {
+                'fill': rgb(112, 56, 42), 'stroke': rgb(190, 139, 67), 'stroke_width': 3,
+            }],
+            ['G', [[.13,.20+lift],[.495,.185+lift],[.495,.79+lift],[.14,.805+lift]], {
+                'fill': rgb(249, 240, 211), 'stroke': rgb(208, 181, 124), 'stroke_width': 2,
+            }],
+            ['G', [[.505,.185+lift],[.87,.20+lift],[.86,.805+lift],[.505,.79+lift]], {
+                'fill': rgb(247, 235, 202), 'stroke': rgb(208, 181, 124), 'stroke_width': 2,
+            }],
+            ['B', [[.50,.19+lift],[.485,.39+lift],[.515,.60+lift],[.50,.795+lift]], {
+                'stroke': rgb(148, 104, 62), 'stroke_width': 3,
+            }],
+            ['T', [.50, .865, '京杭大运河 · 美食图鉴'], {
+                'font_size': 27, 'font_weight': 'bold', 'color': rgb(85, 55, 39),
+            }],
+        ]
+
+        if page == 0:
+            discovered = len(self.state.discovered_foods)
+            data.extend([
+                ['T', [.19, .735 + lift, '行旅总览'], {'font_size': 22, 'font_weight': 'bold', 'align': 'left', 'color': rgb(139, 69, 19)}],
+                ['T', [.19, .685 + lift, f'已收录 {discovered} / 20 道运河风味'], {'font_size': 12, 'align': 'left', 'color': rgb(110, 91, 68)}],
+                ['T', [.56, .735 + lift, '五城印记'], {'font_size': 22, 'font_weight': 'bold', 'align': 'left', 'color': rgb(139, 69, 19)}],
+            ])
+            for index, city in enumerate(cities):
+                column = 0 if index < 3 else 1
+                row = index if index < 3 else index - 3
+                x = .19 if column == 0 else .56
+                y = .60 - row * .145 + lift
+                count = sum(f'{index}_{food}' in self.state.discovered_foods for food in range(4))
+                data.extend([
+                    ['C', [x + .025, y + .018, .025], {'fill': city['theme'] if count == 4 else rgb(205, 195, 172)}],
+                    ['T', [x + .065, y + .013, city['name']], {'font_size': 14, 'font_weight': 'bold', 'align': 'left', 'color': rgb(69, 57, 45)}],
+                    ['T', [x + .21, y + .013, f'{count}/4'], {'font_size': 11, 'align': 'right', 'color': city['theme']}],
+                    ['R', [x + .065, y - .018, .145, .010], {'fill': rgb(222, 211, 185)}],
+                    ['R', [x + .065, y - .018, .145 * count / 4, .010], {'fill': city['theme']}],
+                ])
+        else:
+            city_index = page - 1
+            city = cities[city_index]
+            data.extend([
+                ['T', [.18, .735 + lift, city['name']], {'font_size': 28, 'font_weight': 'bold', 'align': 'left', 'color': city['theme']}],
+                ['T', [.18, .690 + lift, city['cuisine']], {'font_size': 11, 'align': 'left', 'color': rgb(99, 81, 61)}],
+            ])
+            for index, line in enumerate(self._wrapped_lines(city['description'], 23)[:2]):
+                data.append(['T', [.55, .735 - index * .035 + lift, line], {
+                    'font_size': 10, 'align': 'left', 'color': rgb(110, 91, 68),
+                }])
+            positions = ((.27,.54),(.43,.37),(.62,.54),(.78,.37))
+            for food_index, (food, (x, y)) in enumerate(zip(city['foods'], positions)):
+                found = f'{city_index}_{food_index}' in self.state.discovered_foods
+                medallion = self._food_medallion(
+                    x, y + lift, city['id'], food['id'], found,
+                )
+                data.append(['GR', medallion, {'transform': {
+                    'scale': [.52, .52], 'pivot': [x, y + lift],
+                }}])
+                data.append(['T', [x, y - .072 + lift, food['name'] if found else '尚未品鉴'], {
+                    'font_size': 11, 'font_weight': 'bold' if found else 'normal',
+                    'color': city['theme'] if found else rgb(156, 146, 124),
+                }])
+                data.append(['T', [x, y - .102 + lift, '已收录 ✓' if found else '沿运河继续寻味'], {
+                    'font_size': 8, 'color': rgb(113, 101, 79),
+                }])
+
+        prev_disabled = page == 0
+        next_disabled = page == len(cities)
+        prev_hover = self.hovered_item == ('atlas_nav', -1) and not prev_disabled
+        next_hover = self.hovered_item == ('atlas_nav', 1) and not next_disabled
+        data.extend([
+            ['RR', [.20, .105, .12, .055, .018], {'fill': rgb(139, 69, 19) if prev_hover else (rgb(224, 216, 196) if prev_disabled else rgb(218, 190, 137)), 'stroke': rgb(167, 120, 62), 'stroke_width': 1}],
+            ['T', [.26, .121, '‹ 上一页'], {'font_size': 10, 'color': rgb(255, 248, 229) if prev_hover else rgb(105, 80, 56)}],
+            ['T', [.50, .123, f'{page + 1} / {len(cities) + 1}'], {'font_size': 10, 'color': rgb(136, 117, 88)}],
+            ['RR', [.68, .105, .12, .055, .018], {'fill': rgb(139, 69, 19) if next_hover else (rgb(224, 216, 196) if next_disabled else rgb(218, 190, 137)), 'stroke': rgb(167, 120, 62), 'stroke_width': 1}],
+            ['T', [.74, .121, '下一页 ›'], {'font_size': 10, 'color': rgb(255, 248, 229) if next_hover else rgb(105, 80, 56)}],
+        ])
+
+        if abs(self.book_turn) > .025:
+            amount = min(1.0, abs(self.book_turn))
+            edge = .50 + (.34 * amount if self.book_turn > 0 else -.34 * amount)
+            data.append(['G', [[.50,.205+lift],[edge,.23+lift],[edge,.77+lift],[.50,.79+lift]], {
+                'fill': rgb(238, 224, 190), 'stroke': rgb(188, 150, 91), 'stroke_width': 2, 'z': 200,
+            }])
         self.parser.parse(data, self.bounds)
 
     def draw_back_button(self):
@@ -410,10 +596,12 @@ class App:
 
     def draw_finale(self):
         """绘制终章"""
+        lantern_bob = .008 * math.sin(self.animation_phase * 1.8)
         data = [
             ['T', [0.5, 0.7, '运河四季·人间五味'], {'font_size': 36, 'color': rgb(139, 69, 19)}],
             ['T', [0.5, 0.55, '五城印章已全部收集'], {'font_size': 18, 'color': rgb(100, 100, 100)}],
-            ['T', [0.5, 0.4, '🏮 🏮 🏮 🏮 🏮'], {'font_size': 24, 'color': rgb(255, 0, 0)}],
+            ['T', [0.5, 0.4 + lantern_bob, '🏮  🏮  🏮  🏮  🏮'], {'font_size': 24, 'color': rgb(201, 48, 44)}],
+            ['B', [[.22,.34-lantern_bob],[.39,.37],[.62,.32+lantern_bob],[.78,.35]], {'stroke': rgb(218, 190, 130), 'stroke_width': 2}],
             ['T', [0.5, 0.25, '一河通南北，五味见四时'], {'font_size': 16, 'color': rgb(150, 150, 150)}],
             ['T', [0.5, 0.15, 'Enter 重新游览'], {'font_size': 12, 'color': rgb(150, 150, 150)}],
         ]
@@ -430,8 +618,9 @@ class App:
             ['T', [0.5, 0.62, 'Enter - 确认/进入'], {'font_size': 14, 'color': rgb(80, 80, 80)}],
             ['T', [0.5, 0.56, '←/→ - 选择'], {'font_size': 14, 'color': rgb(80, 80, 80)}],
             ['T', [0.5, 0.5, 'Esc - 返回上一级'], {'font_size': 14, 'color': rgb(80, 80, 80)}],
-            ['T', [0.5, 0.44, 'H - 帮助'], {'font_size': 14, 'color': rgb(80, 80, 80)}],
-            ['T', [0.5, 0.34, '按 H 或 Esc 关闭'], {'font_size': 12, 'color': rgb(150, 150, 150)}],
+            ['T', [0.5, 0.44, '鼠标长按 / ←→ - 驾船或翻页'], {'font_size': 14, 'color': rgb(80, 80, 80)}],
+            ['T', [0.5, 0.38, 'B - 打开/关闭美食图鉴'], {'font_size': 14, 'color': rgb(80, 80, 80)}],
+            ['T', [0.5, 0.30, '按 H 或 Esc 关闭'], {'font_size': 12, 'color': rgb(150, 150, 150)}],
         ]
 
         self.parser.parse(data, self.bounds)
@@ -443,6 +632,7 @@ class App:
             Mode.MAP: '地图',
             Mode.CITY: '城市',
             Mode.FOOD_DETAIL: '详情',
+            Mode.ATLAS: '图鉴',
             Mode.FINALE: '终章',
         }
         mode_name = mode_names.get(self.state.mode, '未知')
@@ -457,6 +647,7 @@ class App:
         if self.transition.active:
             return
         self.move_direction = 0
+        self._pressed_nav = None
         self.state.transition_locked = True
 
         def switch_scene():
@@ -490,6 +681,8 @@ class App:
             self.begin_transition(self.machine.open_food)
         elif self.state.mode == Mode.FOOD_DETAIL:
             self.begin_transition(self.machine.complete_tasting)
+        elif self.state.mode == Mode.ATLAS:
+            self._turn_atlas(1)
         elif self.state.mode == Mode.FINALE:
             self.begin_transition(self.machine.return_from_finale)
 
@@ -515,6 +708,8 @@ class App:
         elif self.state.mode == Mode.CITY:
             self.machine.prev_food()
             self.render()
+        elif self.state.mode == Mode.ATLAS:
+            self._turn_atlas(-1)
 
     def on_right(self):
         """右方向键"""
@@ -526,15 +721,28 @@ class App:
         elif self.state.mode == Mode.CITY:
             self.machine.next_food()
             self.render()
+        elif self.state.mode == Mode.ATLAS:
+            self._turn_atlas(1)
 
     def on_direction_release(self):
         self.move_direction = 0
+
+    def _turn_atlas(self, direction):
+        previous = self.state.atlas_page
+        self.machine.turn_atlas(direction)
+        if self.state.atlas_page != previous:
+            self.book_turn = float(direction)
+            self.render()
 
     def on_animation_frame(self, delta_seconds):
         """Drive restrained vector motion, boat physics and transitions."""
         self.animation_phase += delta_seconds
         was_transitioning = self.transition.active
         self.transition.step(delta_seconds)
+        if abs(self.book_turn) > .001:
+            self.book_turn *= math.exp(-7.5 * delta_seconds)
+        else:
+            self.book_turn = 0.0
         if was_transitioning and not self.transition.active:
             self.state.transition_locked = False
 
@@ -563,6 +771,16 @@ class App:
         self.machine.toggle_help()
         self.render()
 
+    def on_atlas(self):
+        """B toggles the atlas from either side of the map."""
+        if self.state.transition_locked or self.state.help_open:
+            return
+        if self.state.mode == Mode.MAP:
+            self.begin_transition(self.machine.open_atlas)
+        elif self.state.mode == Mode.ATLAS:
+            self.begin_transition(self.machine.back)
+        self.render()
+
     def on_motion(self, x, y):
         """Update semantic hover state without redrawing for every pixel."""
         nx, ny = x / CANVAS_WIDTH, y / CANVAS_HEIGHT
@@ -576,21 +794,31 @@ class App:
             if .35 <= nx <= .65 and .14 <= ny <= .26:
                 hovered = ('start', 0)
         elif not self.state.help_open and self.state.mode == Mode.MAP:
-            if .045 <= nx <= .14 and .37 <= ny <= .51:
+            if .80 <= nx <= .955 and .85 <= ny <= .94:
+                hovered = ('atlas', 0)
+            elif .045 <= nx <= .14 and .37 <= ny <= .51:
                 hovered = ('nav', -1)
             elif .86 <= nx <= .955 and .37 <= ny <= .51:
                 hovered = ('nav', 1)
-            elif self.boat.nearby_city() is not None and .79 <= nx <= .91 and .70 <= ny <= .78:
-                hovered = ('explore', self.boat.nearby_city())
+            elif self.boat.nearby_city() is not None:
+                nearby = self.boat.nearby_city()
+                *_, explore_bounds = self._preview_layout(nearby)
+                if self._inside(nx, ny, explore_bounds):
+                    hovered = ('explore', nearby)
         elif not self.state.help_open and self.state.mode == Mode.CITY:
             city_id = get_city(self.state.current_city)['id']
             for index, (px, py) in enumerate(FOOD_POSITIONS[city_id]):
-                if (px - nx) ** 2 + (py - ny) ** 2 <= .018:
+                if (px - nx) ** 2 + (py - ny) ** 2 <= .010:
                     hovered = ('food', index)
                     break
         elif not self.state.help_open and self.state.mode == Mode.FOOD_DETAIL:
             if .73 <= nx <= .91 and .16 <= ny <= .25:
                 hovered = ('taste', 0)
+        elif not self.state.help_open and self.state.mode == Mode.ATLAS:
+            if .19 <= nx <= .33 and .09 <= ny <= .17 and self.state.atlas_page > 0:
+                hovered = ('atlas_nav', -1)
+            elif .67 <= nx <= .81 and .09 <= ny <= .17 and self.state.atlas_page < 5:
+                hovered = ('atlas_nav', 1)
 
         self.engine.set_cursor('hand2' if hovered is not None else '')
         if hovered != self.hovered_item:
@@ -616,24 +844,56 @@ class App:
             if .35 <= nx <= .65 and .14 <= ny <= .26:
                 self.begin_transition(self.machine.start_journey)
         elif self.state.mode == Mode.MAP:
-            if .045 <= nx <= .14 and .37 <= ny <= .51:
+            if .80 <= nx <= .955 and .85 <= ny <= .94:
+                self.begin_transition(self.machine.open_atlas)
+            elif .045 <= nx <= .14 and .37 <= ny <= .51:
                 self.boat.nudge(-1)
             elif .86 <= nx <= .955 and .37 <= ny <= .51:
                 self.boat.nudge(1)
-            elif self.boat.nearby_city() is not None and .79 <= nx <= .91 and .70 <= ny <= .78:
-                self.state.current_city = self.boat.nearby_city()
-                self.begin_transition(self.machine.enter_city)
+            elif self.boat.nearby_city() is not None:
+                nearby = self.boat.nearby_city()
+                *_, explore_bounds = self._preview_layout(nearby)
+                if self._inside(nx, ny, explore_bounds):
+                    self.state.current_city = nearby
+                    self.begin_transition(self.machine.enter_city)
         elif self.state.mode == Mode.CITY:
             city_id = get_city(self.state.current_city)['id']
             for index, (px, py) in enumerate(FOOD_POSITIONS[city_id]):
-                if (px - nx) ** 2 + (py - ny) ** 2 <= .018:
+                if (px - nx) ** 2 + (py - ny) ** 2 <= .010:
                     self.state.current_food = index
                     self.begin_transition(self.machine.open_food)
                     break
         elif self.state.mode == Mode.FOOD_DETAIL:
             if .73 <= nx <= .91 and .16 <= ny <= .25:
                 self.begin_transition(self.machine.complete_tasting)
+        elif self.state.mode == Mode.ATLAS:
+            if .19 <= nx <= .33 and .09 <= ny <= .17:
+                self._turn_atlas(-1)
+            elif .67 <= nx <= .81 and .09 <= ny <= .17:
+                self._turn_atlas(1)
         self.render()
+
+    def on_pointer_press(self, x, y):
+        """Turn map arrows into continuous press-and-hold throttles."""
+        if self.state.mode != Mode.MAP or self.state.help_open or self.state.transition_locked:
+            return
+        nx, ny = x / CANVAS_WIDTH, y / CANVAS_HEIGHT
+        direction = 0
+        if .045 <= nx <= .14 and .37 <= ny <= .51:
+            direction = -1
+        elif .86 <= nx <= .955 and .37 <= ny <= .51:
+            direction = 1
+        if direction:
+            self._pressed_nav = direction
+            self.move_direction = direction
+            self.hovered_item = ('nav', direction)
+            self.render()
+
+    def on_pointer_release(self, _x, _y):
+        if self._pressed_nav is not None:
+            self._pressed_nav = None
+            self.move_direction = 0
+            self.render()
 
 
 def main(argv=None):

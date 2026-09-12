@@ -1,6 +1,5 @@
 """
-五城十味绘图数据 - 占位版本
-后续可替换为高精度插画数据
+五城二十味矢量绘图数据
 """
 
 from ...config import rgb, make_style, linear_gradient, radial_gradient
@@ -170,18 +169,115 @@ WEST_LAKE_FISH = [
 ]
 
 
+# 二期新增菜品共用一套克制的矢量餐具语言，但保留各自轮廓与配色。
+NOODLE_BOWL = [
+    *plate_drawing(0.5, 0.40, 0.18),
+    ['G', [[.34,.48],[.66,.48],[.60,.34],[.40,.34]],
+     {'fill': rgb(238, 231, 208), 'stroke': rgb(120, 91, 61), 'stroke_width': 2}],
+    ['E', [.50,.48,.16,.045], {'fill': rgb(132, 75, 34)}],
+    ['B', [[.39,.49],[.45,.45],[.54,.52],[.62,.47]], {'stroke': rgb(238, 195, 92), 'stroke_width': 3}],
+    ['L', [[.42,.54],[.64,.62]], {'stroke': rgb(103, 65, 39), 'stroke_width': 2}],
+]
+
+HOTPOT = [
+    *plate_drawing(0.5, 0.40, 0.19),
+    ['E', [.50,.45,.17,.10], {'fill': rgb(151, 65, 42), 'stroke': rgb(91, 50, 36), 'stroke_width': 2}],
+    ['E', [.50,.48,.145,.066], {'fill': rgb(213, 114, 62)}],
+    ['R', [.47,.47,.06,.13], {'fill': rgb(176, 147, 92), 'stroke': rgb(93, 67, 45), 'stroke_width': 1}],
+    ['B', [[.41,.55],[.39,.59],[.42,.63],[.40,.67]], {'stroke': rgb(204, 199, 182), 'stroke_width': 2}],
+    ['B', [[.58,.55],[.56,.59],[.59,.63],[.57,.67]], {'stroke': rgb(204, 199, 182), 'stroke_width': 2}],
+]
+
+STEW_BOWL = [
+    *plate_drawing(0.5, 0.40, 0.18),
+    ['G', [[.34,.48],[.66,.48],[.60,.34],[.40,.34]], {'fill': rgb(225, 211, 181), 'stroke': rgb(112, 77, 49), 'stroke_width': 2}],
+    ['E', [.50,.48,.16,.05], {'fill': rgb(105, 59, 34)}],
+    ['C', [.44,.49,.035], {'fill': rgb(170, 101, 55)}],
+    ['C', [.53,.47,.040], {'fill': rgb(189, 125, 64)}],
+    ['R', [.56,.47,.055,.025], {'fill': rgb(218, 187, 124)}],
+]
+
+JIANBING = [
+    *plate_drawing(0.5, 0.43, 0.19),
+    ['G', [[.34,.39],[.61,.35],[.67,.50],[.40,.55]], {'fill': rgb(222, 166, 61), 'stroke': rgb(133, 81, 33), 'stroke_width': 2}],
+    ['G', [[.43,.39],[.60,.37],[.64,.47],[.47,.50]], {'fill': rgb(235, 205, 109)}],
+    ['L', [[.37,.47],[.64,.42]], {'stroke': rgb(132, 52, 32), 'stroke_width': 2}],
+    ['L', [[.45,.52],[.57,.38]], {'stroke': rgb(65, 126, 69), 'stroke_width': 2}],
+]
+
+TOFU_SILK = [
+    *plate_drawing(0.5, 0.41, 0.18),
+    ['E', [.50,.45,.16,.095], {'fill': rgb(229, 199, 121), 'stroke': rgb(126, 89, 49), 'stroke_width': 2}],
+    *[['L', [[x,.40],[x+.035,.51]], {'stroke': rgb(250, 239, 194), 'stroke_width': 2}]
+      for x in (.39,.43,.47,.51,.55,.59)],
+    ['E', [.45,.50,.025,.012], {'fill': rgb(197, 80, 47)}],
+    ['E', [.57,.43,.028,.012], {'fill': rgb(72, 135, 71)}],
+]
+
+FRIED_RICE = [
+    *plate_drawing(0.5, 0.42, 0.18),
+    ['E', [.50,.45,.145,.09], {'fill': rgb(239, 190, 73)}],
+    *[['C', [x,y,.012], {'fill': color}] for x, y, color in (
+        (.43,.46,rgb(91,145,74)), (.48,.50,rgb(213,91,54)),
+        (.54,.44,rgb(242,221,132)), (.59,.49,rgb(91,145,74)),
+        (.49,.41,rgb(213,91,54)),
+    )],
+]
+
+EEL_PASTE = [
+    *plate_drawing(0.5, 0.42, 0.18),
+    ['E', [.50,.45,.15,.085], {'fill': rgb(97, 50, 31)}],
+    ['B', [[.39,.44],[.45,.53],[.53,.37],[.62,.48]], {'stroke': rgb(185, 103, 47), 'stroke_width': 6}],
+    ['L', [[.47,.55],[.54,.37]], {'stroke': rgb(244, 224, 154), 'stroke_width': 2}],
+]
+
+RICE_CAKE = [
+    *plate_drawing(0.5, 0.42, 0.18),
+    ['R', [.38,.39,.11,.10], {'fill': rgb(244, 226, 210), 'stroke': rgb(185, 133, 95), 'stroke_width': 1}],
+    ['R', [.51,.42,.11,.10], {'fill': rgb(225, 206, 173), 'stroke': rgb(185, 133, 95), 'stroke_width': 1}],
+    ['C', [.43,.45,.018], {'fill': rgb(196, 78, 70)}],
+    ['C', [.56,.48,.018], {'fill': rgb(107, 145, 76)}],
+]
+
+DONGPO_PORK = [
+    *plate_drawing(0.5, 0.42, 0.18),
+    ['R', [.39,.36,.22,.16], {'fill': rgb(126, 48, 31), 'stroke': rgb(83, 42, 30), 'stroke_width': 2}],
+    ['R', [.40,.44,.20,.065], {'fill': rgb(188, 75, 43)}],
+    ['R', [.40,.405,.20,.035], {'fill': rgb(229, 157, 94)}],
+    ['E', [.46,.49,.045,.015], {'fill': rgb(236, 174, 111)}],
+]
+
+LONGJING_SHRIMP = [
+    *plate_drawing(0.5, 0.42, 0.19),
+    *[['A', [x,y,.035,20,300], {'stroke': rgb(239, 167, 153), 'stroke_width': 5}]
+      for x, y in ((.40,.43),(.47,.49),(.54,.42),(.60,.48))],
+    ['L', [[.42,.51],[.45,.55]], {'stroke': rgb(62, 132, 67), 'stroke_width': 2}],
+    ['L', [[.55,.51],[.58,.56]], {'stroke': rgb(62, 132, 67), 'stroke_width': 2}],
+]
+
+
 # 食物绘图数据映射
 FOOD_DRAWINGS = {
     'beijing_roast_duck': ROAST_DUCK,
-    'beijing_mooncake': MOONCAKE,
+    'beijing_mutton_hotpot': HOTPOT,
+    'beijing_zhajiang_noodles': NOODLE_BOWL,
+    'beijing_luzhu': STEW_BOWL,
+    'tianjin_jianbing': JIANBING,
     'tianjin_baozi': BAOZI,
     'tianjin_mahua': MAHUA,
+    'tianjin_guobacai': STEW_BOWL,
     'yangzhou_lion_head': LION_HEAD,
+    'yangzhou_boiled_shredded_tofu': TOFU_SILK,
     'yangzhou_soup_dumpling': SOUP_DUMPLING,
-    'suzhou_osmanthus_cake': OSMANTHUS_CAKE,
+    'yangzhou_fried_rice': FRIED_RICE,
     'suzhou_squirrel_fish': SQUIRREL_FISH,
-    'hangzhou_longjing_tea': LONGJING_TEA,
+    'suzhou_suzhou_noodles': NOODLE_BOWL,
+    'suzhou_eel_paste': EEL_PASTE,
+    'suzhou_rice_cake': RICE_CAKE,
     'hangzhou_west_lake_fish': WEST_LAKE_FISH,
+    'hangzhou_dongpo_pork': DONGPO_PORK,
+    'hangzhou_longjing_shrimp': LONGJING_SHRIMP,
+    'hangzhou_pianerchuan': NOODLE_BOWL,
 }
 
 

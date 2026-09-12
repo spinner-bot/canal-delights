@@ -115,6 +115,28 @@ class DrawingEngine:
             callback(x, y)
         self.screen.cv.bind('<Motion>', event_handler)
 
+    def _world_pointer(self, event):
+        """Convert a Tk pointer event to Turtle's world coordinates."""
+        x = self.screen.cv.canvasx(event.x) / self.screen.xscale
+        y = -self.screen.cv.canvasy(event.y) / self.screen.yscale
+        return x, y
+
+    def on_pointer_press(self, callback):
+        """Bind a press without replacing Turtle's existing click callback."""
+        self.screen.cv.bind(
+            '<ButtonPress-1>',
+            lambda event: callback(*self._world_pointer(event)),
+            add='+',
+        )
+
+    def on_pointer_release(self, callback):
+        """Bind pointer release for press-and-hold controls."""
+        self.screen.cv.bind(
+            '<ButtonRelease-1>',
+            lambda event: callback(*self._world_pointer(event)),
+            add='+',
+        )
+
     def set_cursor(self, cursor: str = ''):
         """Set the window cursor; supported identically by both backends."""
         self.screen.cv.configure(cursor=cursor)

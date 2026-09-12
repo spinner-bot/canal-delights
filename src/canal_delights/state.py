@@ -13,6 +13,7 @@ class Mode(Enum):
     MAP = auto()          # 运河地图
     CITY = auto()         # 城市场景
     FOOD_DETAIL = auto()  # 美食详情
+    ATLAS = auto()        # 美食图鉴
     FINALE = auto()       # 终章长卷
 
 
@@ -21,7 +22,8 @@ class AppState:
     """应用状态"""
     mode: Mode = Mode.INTRO
     current_city: int = 0  # 0-4 对应五城
-    current_food: int = 0  # 0-1 对应每城两道美食
+    current_food: int = 0  # 0-3 对应每城四道美食
+    atlas_page: int = 0    # 0 为总览，1-5 为城市页
     visited_cities: Set[int] = field(default_factory=set)
     discovered_foods: Set[str] = field(default_factory=set)  # "city_food" 格式
     stamped_cities: Set[int] = field(default_factory=set)
@@ -30,7 +32,7 @@ class AppState:
 
     def can_go_back(self) -> bool:
         """是否可以返回上一级"""
-        return self.mode in [Mode.MAP, Mode.CITY, Mode.FOOD_DETAIL]
+        return self.mode in [Mode.MAP, Mode.CITY, Mode.FOOD_DETAIL, Mode.ATLAS]
 
     def is_all_stamped(self) -> bool:
         """是否五城全部盖章"""
@@ -44,18 +46,20 @@ class AppState:
 class StateMachine:
     """状态机 - 管理状态转换"""
 
-    def __init__(self, state: AppState):
+    def __init__(self, state: AppState, city_count: int = 5, food_count: int = 4):
         self.state = state
+        self.city_count = city_count
+        self.food_count = food_count
 
     def next_city(self):
         """下一个城市"""
         if self.state.mode == Mode.MAP and not self.state.transition_locked:
-            self.state.current_city = (self.state.current_city + 1) % 5
+            self.state.current_city = (self.state.current_city + 1) % self.city_count
 
     def prev_city(self):
         """上一个城市"""
         if self.state.mode == Mode.MAP and not self.state.transition_locked:
-            self.state.current_city = (self.state.current_city - 1) % 5
+            self.state.current_city = (self.state.current_city - 1) % self.city_count
 
     def enter_city(self):
         """进入城市"""
@@ -67,12 +71,12 @@ class StateMachine:
     def next_food(self):
         """下一道美食"""
         if self.state.mode == Mode.CITY and not self.state.transition_locked:
-            self.state.current_food = (self.state.current_food + 1) % 2
+            self.state.current_food = (self.state.current_food + 1) % self.food_count
 
     def prev_food(self):
         """上一道美食"""
         if self.state.mode == Mode.CITY and not self.state.transition_locked:
-            self.state.current_food = (self.state.current_food - 1) % 2
+            self.state.current_food = (self.state.current_food - 1) % self.food_count
 
     def open_food(self):
         """打开美食详情"""
@@ -85,9 +89,10 @@ class StateMachine:
             food_key = self.state.get_food_key()
             self.state.discovered_foods.add(food_key)
 
-            # 如果两道菜都发现了，给城市盖章
+            # 四道菜全部发现后，给城市盖章。
             city = self.state.current_city
-            if f"{city}_0" in self.state.discovered_foods and f"{city}_1" in self.state.discovered_foods:
+            if all(f"{city}_{index}" in self.state.discovered_foods
+                   for index in range(self.food_count)):
                 self.state.stamped_cities.add(city)
 
             self.state.mode = Mode.CITY
@@ -101,8 +106,23 @@ class StateMachine:
             self.state.mode = Mode.CITY
         elif self.state.mode == Mode.CITY:
             self.state.mode = Mode.MAP
+        elif self.state.mode == Mode.ATLAS:
+            self.state.mode = Mode.MAP
         elif self.state.mode == Mode.MAP:
             self.state.mode = Mode.INTRO
+
+    def open_atlas(self):
+        """从地图打开图鉴。"""
+        if self.state.mode == Mode.MAP and not self.state.transition_locked:
+            self.state.mode = Mode.ATLAS
+            self.state.atlas_page = 0
+
+    def turn_atlas(self, direction: int):
+        """翻动图鉴，页码限制在总览与五个城市页之间。"""
+        if self.state.mode == Mode.ATLAS and not self.state.transition_locked:
+            self.state.atlas_page = max(
+                0, min(self.city_count, self.state.atlas_page + direction),
+            )
 
     def start_journey(self):
         """开始旅程"""
