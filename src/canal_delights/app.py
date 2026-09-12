@@ -2,9 +2,13 @@
 应用主类 - 协调所有模块
 """
 
+import math
+
 from .state import AppState, StateMachine, Mode
 from .core.backend import RenderMode, create_engine
 from .core.animation import AnimationClock
+from .core.navigation import BoatPhysics, CITY_POINTS, ROUTE_SEGMENTS, route_point, route_tangent
+from .core.particles import ParticleSystem
 from .core.renderer import DrawingDataParser
 from .config import rgb, CANVAS_WIDTH, CANVAS_HEIGHT, CANVAS_BG
 from .content.catalog import get_city, get_food
@@ -22,7 +26,14 @@ class App:
         self.bounds = (0, 0, CANVAS_WIDTH, CANVAS_HEIGHT)
         self._background_rendered = False
         self.hovered_item = None
-        self.animations = AnimationClock(self.engine.screen, fps=30)
+        self.animations = AnimationClock(
+            self.engine.screen, fps=30 if self.engine.mode_name == 'accelerated' else 15,
+        )
+        self.boat = BoatPhysics()
+        self.particles = ParticleSystem(limit=72 if self.engine.mode_name == 'accelerated' else 18)
+        self.move_direction = 0
+        self.animation_phase = 0.0
+        self._splash_elapsed = 0.0
 
     def run(self):
         """运行应用"""
@@ -32,7 +43,7 @@ class App:
         print()
         print("操作说明:")
         print("  INTRO: Enter/点击 开始旅程")
-        print("  MAP:   ←/→ 选择城市, Enter 进入")
+        print("  MAP:   按住 ←/→ 驾船, 靠近城市后 Enter 探索")
         print("  CITY:  ←/→ 选择美食, Enter 查看")
         print("  DETAIL: Enter 完成品鉴")
         print("  Esc:   返回上一级")
@@ -44,8 +55,10 @@ class App:
         self.engine.screen.onkey(self.on_enter, 'Return')
         self.engine.screen.onkey(self.on_enter, 'KP_Enter')
         self.engine.screen.onkey(self.on_escape, 'Escape')
-        self.engine.screen.onkey(self.on_left, 'Left')
-        self.engine.screen.onkey(self.on_right, 'Right')
+        self.engine.screen.onkeypress(self.on_left, 'Left')
+        self.engine.screen.onkeypress(self.on_right, 'Right')
+        self.engine.screen.onkeyrelease(self.on_direction_release, 'Left')
+        self.engine.screen.onkeyrelease(self.on_direction_release, 'Right')
         self.engine.screen.onkey(self.on_help, 'h')
         self.engine.screen.onkey(self.on_help, 'H')
 
@@ -55,6 +68,7 @@ class App:
 
         self.engine.listen()
         self.render()
+        self.animations.add(self.on_animation_frame)
         self.engine.mainloop()
 
     def render(self):
@@ -162,38 +176,36 @@ class App:
                   rgb(65, 105, 225), rgb(107, 142, 35)]
 
         # 标题
+        route_commands = [['M', *CITY_POINTS[0]]]
+        for _, control_1, control_2, end in ROUTE_SEGMENTS:
+            route_commands.append(['C', *control_1, *control_2, *end])
+
+        nearby_city = self.boat.nearby_city()
         data = [
-            # One continuous Catmull–Rom-derived spline.  Its cubic controls
-            # make a single flowing waterway pass through all five city nodes.
-            ['PATH', [
-                ['M', .17, .78],
-                ['C', .1917, .7650, .2367, .7483, .30, .69],
-                ['C', .3633, .6317, .4667, .4983, .55, .43],
-                ['C', .6333, .3617, .7683, .3283, .80, .28],
-                ['C', .8317, .2317, .7500, .1633, .74, .14],
-            ], {'stroke': rgb(117, 172, 184), 'stroke_width': 36}],
-            ['PATH', [
-                ['M', .17, .78],
-                ['C', .1917, .7650, .2367, .7483, .30, .69],
-                ['C', .3633, .6317, .4667, .4983, .55, .43],
-                ['C', .6333, .3617, .7683, .3283, .80, .28],
-                ['C', .8317, .2317, .7500, .1633, .74, .14],
-            ], {'stroke': rgb(208, 233, 229), 'stroke_width': 3}],
+            ['PATH', route_commands, {'stroke': rgb(94, 155, 170), 'stroke_width': 40}],
+            ['PATH', route_commands, {'stroke': rgb(181, 220, 220), 'stroke_width': 27}],
+            ['PATH', route_commands, {'stroke': rgb(226, 242, 235), 'stroke_width': 3}],
             ['T', [0.5, 0.9, '运河地图'], {'font_size': 28, 'color': rgb(50, 50, 50)}],
-            ['T', [0.5, 0.84, '循水而行，寻访五城时味'], {'font_size': 13, 'color': rgb(122, 101, 75)}],
+            ['T', [0.5, 0.845, '驾一叶轻舟，循水寻味'], {'font_size': 13, 'color': rgb(122, 101, 75)}],
         ]
 
         # 城市节点
         for i, (city, color) in enumerate(zip(cities, colors)):
-            x = (.17, .30, .55, .80, .74)[i]
-            y = (.78, .69, .43, .28, .14)[i]
+            x, y = CITY_POINTS[i]
 
-            # 城市圆圈
-            fill_color = color if i == self.state.current_city else rgb(200, 200, 200)
-            if self.hovered_item == ('city', i):
-                data.append(['C', [x, y, 0.069], {'fill': rgb(239, 221, 180), 'stroke': color, 'stroke_width': 2}])
-            data.append(['C', [x, y, 0.058], {'fill': rgb(245, 240, 220), 'stroke': color, 'stroke_width': 2}])
-            data.append(['C', [x, y, 0.040], {'fill': fill_color}])
+            # Unified inverted-drop marker. Proximity, visited and stamped
+            # states change its color without changing its visual language.
+            active = i == nearby_city
+            pulse = .004 * (1 + math.sin(self.animation_phase * 4)) if active else 0
+            marker_fill = color if active else rgb(190, 190, 181)
+            if i in self.state.visited_cities and not active:
+                marker_fill = tuple(int((channel + 230) / 2) for channel in color)
+            data.append(['C', [x, y + .018, .050 + pulse], {
+                'fill': rgb(247, 241, 220), 'stroke': color if active else rgb(158, 151, 136), 'stroke_width': 2,
+            }])
+            data.append(['G', [[x - .034, y + .010], [x + .034, y + .010], [x, y - .050]], {'fill': marker_fill}])
+            data.append(['C', [x, y + .020, .030], {'fill': marker_fill}])
+            data.append(['C', [x, y + .020, .010], {'fill': rgb(247, 241, 220)}])
 
             # 城市名
             data.append(['T', [x, y - 0.08, city], {'font_size': 14, 'color': rgb(50, 50, 50)}])
@@ -202,9 +214,48 @@ class App:
             if i in self.state.stamped_cities:
                 data.append(['T', [x, y + 0.02, '✓'], {'font_size': 20, 'color': rgb(255, 0, 0)}])
 
-        # 进度
+        # Boat and motion particles are regular scene data, so both rendering
+        # modes present the same navigation state.
+        data.extend(self.particles.drawing_data())
+        boat_x, boat_y = route_point(self.boat.position)
+        tangent_x, tangent_y = route_tangent(self.boat.position)
+        boat_angle = math.degrees(math.atan2(tangent_y * CANVAS_HEIGHT, tangent_x * CANVAS_WIDTH))
+        bob = math.sin(self.animation_phase * 5) * .003
+        data.append(['GR', [
+            ['E', [boat_x, boat_y - .018 + bob, .050, .012], {'fill': rgb(111, 170, 181)}],
+            ['G', [[boat_x - .047, boat_y + bob], [boat_x + .047, boat_y + bob],
+                   [boat_x + .030, boat_y - .025 + bob], [boat_x - .030, boat_y - .025 + bob]],
+             {'fill': rgb(115, 65, 38), 'stroke': rgb(72, 45, 31), 'stroke_width': 1}],
+            ['L', [[boat_x, boat_y + bob], [boat_x, boat_y + .060 + bob]],
+             {'stroke': rgb(75, 49, 33), 'stroke_width': 2}],
+            ['G', [[boat_x + .002, boat_y + .055 + bob], [boat_x + .002, boat_y + .012 + bob],
+                   [boat_x + .040, boat_y + .025 + bob]], {'fill': rgb(201, 48, 44)}],
+        ], {'transform': {'rotate': boat_angle, 'pivot': [boat_x, boat_y]}}])
+
+        # Side controls behave like a compact physical throttle.
+        left_hover = self.hovered_item == ('nav', -1)
+        right_hover = self.hovered_item == ('nav', 1)
+        data.extend([
+            ['RR', [.055, .39, .075, .10, .025], {'fill': rgb(139, 69, 19) if left_hover else rgb(224, 207, 170), 'stroke': rgb(164, 121, 62), 'stroke_width': 2}],
+            ['T', [.092, .418, '‹'], {'font_size': 26, 'color': rgb(255, 248, 229) if left_hover else rgb(91, 63, 39)}],
+            ['RR', [.87, .39, .075, .10, .025], {'fill': rgb(139, 69, 19) if right_hover else rgb(224, 207, 170), 'stroke': rgb(164, 121, 62), 'stroke_width': 2}],
+            ['T', [.907, .418, '›'], {'font_size': 26, 'color': rgb(255, 248, 229) if right_hover else rgb(91, 63, 39)}],
+        ])
+
+        if nearby_city is not None:
+            city_data = get_city(nearby_city)
+            explore_hover = self.hovered_item == ('explore', nearby_city)
+            data.extend([
+                ['RR', [.59, .69, .34, .145, .025], {'fill': rgb(250, 245, 225), 'stroke': city_data['theme'], 'stroke_width': 2}],
+                ['T', [.625, .783, city_data['name']], {'font_size': 19, 'font_weight': 'bold', 'align': 'left', 'color': rgb(55, 48, 39)}],
+                ['T', [.625, .737, f"{city_data['season']} · 两道时味待寻"], {'font_size': 11, 'align': 'left', 'color': rgb(120, 105, 83)}],
+                ['RR', [.80, .713, .10, .052, .015], {'fill': city_data['theme'] if explore_hover else rgb(219, 190, 130), 'stroke': city_data['theme'], 'stroke_width': 1}],
+                ['T', [.85, .727, '探索'], {'font_size': 11, 'font_weight': 'bold', 'color': rgb(255, 250, 235) if explore_hover else rgb(75, 54, 35)}],
+            ])
+
+        # Progress
         progress = f"已游览: {len(self.state.visited_cities)}/5  已盖章: {len(self.state.stamped_cities)}/5"
-        data.append(['T', [0.5, 0.15, progress], {'font_size': 12, 'color': rgb(100, 100, 100)}])
+        data.append(['T', [0.5, 0.075, progress], {'font_size': 12, 'color': rgb(100, 100, 100)}])
 
         self.parser.parse(data, self.bounds)
 
@@ -324,7 +375,8 @@ class App:
         elif self.state.mode == Mode.MAP:
             if self.state.is_all_stamped():
                 self.machine.go_to_finale()
-            else:
+            elif self.boat.nearby_city() is not None:
+                self.state.current_city = self.boat.nearby_city()
                 self.machine.enter_city()
         elif self.state.mode == Mode.CITY:
             self.machine.open_food()
@@ -349,11 +401,10 @@ class App:
             return
 
         if self.state.mode == Mode.MAP:
-            self.machine.prev_city()
+            self.move_direction = -1
         elif self.state.mode == Mode.CITY:
             self.machine.prev_food()
-
-        self.render()
+            self.render()
 
     def on_right(self):
         """右方向键"""
@@ -361,11 +412,33 @@ class App:
             return
 
         if self.state.mode == Mode.MAP:
-            self.machine.next_city()
+            self.move_direction = 1
         elif self.state.mode == Mode.CITY:
             self.machine.next_food()
+            self.render()
 
+    def on_direction_release(self):
+        self.move_direction = 0
+
+    def on_animation_frame(self, delta_seconds):
+        """Drive ambient motion, boat physics and particles from one clock."""
+        self.animation_phase += delta_seconds
+        if self.state.mode == Mode.MAP:
+            moved = self.boat.step(self.move_direction, delta_seconds)
+            self.particles.step(delta_seconds)
+            self._splash_elapsed += delta_seconds
+            if moved and abs(self.boat.velocity) > .012 and self._splash_elapsed >= .065:
+                x, y = route_point(self.boat.position)
+                self.particles.emit_splash(
+                    x, y - .018, 1 if self.boat.velocity >= 0 else -1,
+                    3 if self.engine.mode_name == 'accelerated' else 1,
+                )
+                self._splash_elapsed = 0.0
+            nearby = self.boat.nearby_city()
+            if nearby is not None:
+                self.state.current_city = nearby
         self.render()
+        return True
 
     def on_help(self):
         """H 键"""
@@ -381,11 +454,12 @@ class App:
             if .35 <= nx <= .65 and .14 <= ny <= .26:
                 hovered = ('start', 0)
         elif not self.state.help_open and self.state.mode == Mode.MAP:
-            positions = [(.17, .78), (.30, .69), (.55, .43), (.80, .28), (.74, .14)]
-            for index, (px, py) in enumerate(positions):
-                if (px - nx) ** 2 + (py - ny) ** 2 <= .006:
-                    hovered = ('city', index)
-                    break
+            if .045 <= nx <= .14 and .37 <= ny <= .51:
+                hovered = ('nav', -1)
+            elif .86 <= nx <= .955 and .37 <= ny <= .51:
+                hovered = ('nav', 1)
+            elif self.boat.nearby_city() is not None and .79 <= nx <= .91 and .70 <= ny <= .78:
+                hovered = ('explore', self.boat.nearby_city())
         elif not self.state.help_open and self.state.mode == Mode.CITY:
             if .16 <= nx <= .44 and .36 <= ny <= .64:
                 hovered = ('food', 0)
@@ -407,20 +481,14 @@ class App:
         if self.state.mode == Mode.INTRO:
             self.machine.start_journey()
         elif self.state.mode == Mode.MAP:
-            # City seals sit at fixed scene positions.  A click selects the
-            # nearest seal; clicking the selected one opens that city.
-            positions = [(.17, .78), (.30, .69), (.55, .43), (.80, .28), (.74, .14)]
             nx, ny = x / CANVAS_WIDTH, y / CANVAS_HEIGHT
-            nearest = min(range(len(positions)), key=lambda i: (positions[i][0] - nx) ** 2 + (positions[i][1] - ny) ** 2)
-            px, py = positions[nearest]
-            if (px - nx) ** 2 + (py - ny) ** 2 < .012:
-                if nearest == self.state.current_city:
-                    if self.state.is_all_stamped():
-                        self.machine.go_to_finale()
-                    else:
-                        self.machine.enter_city()
-                else:
-                    self.state.current_city = nearest
+            if .045 <= nx <= .14 and .37 <= ny <= .51:
+                self.boat.nudge(-1)
+            elif .86 <= nx <= .955 and .37 <= ny <= .51:
+                self.boat.nudge(1)
+            elif self.boat.nearby_city() is not None and .79 <= nx <= .91 and .70 <= ny <= .78:
+                self.state.current_city = self.boat.nearby_city()
+                self.machine.enter_city()
         elif self.state.mode == Mode.CITY:
             # The two dishes are deliberately generous click targets.
             nx = x / CANVAS_WIDTH
