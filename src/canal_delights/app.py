@@ -4,6 +4,7 @@
 
 from .state import AppState, StateMachine, Mode
 from .core.backend import RenderMode, create_engine
+from .core.animation import AnimationClock
 from .core.renderer import DrawingDataParser
 from .config import rgb, CANVAS_WIDTH, CANVAS_HEIGHT, CANVAS_BG
 from .content.catalog import get_city, get_food
@@ -19,6 +20,9 @@ class App:
         self.state = AppState()
         self.machine = StateMachine(self.state)
         self.bounds = (0, 0, CANVAS_WIDTH, CANVAS_HEIGHT)
+        self._background_rendered = False
+        self.hovered_item = None
+        self.animations = AnimationClock(self.engine.screen, fps=30)
 
     def run(self):
         """运行应用"""
@@ -47,6 +51,7 @@ class App:
 
         # 鼠标点击
         self.engine.screen.onclick(self.on_click)
+        self.engine.on_motion(self.on_motion)
 
         self.engine.listen()
         self.render()
@@ -54,10 +59,15 @@ class App:
 
     def render(self):
         """渲染当前帧"""
-        self.engine.clear()
+        # The paper is static and lives on its own retained layer.  Interaction
+        # only clears content, which is essential for smooth animation later.
+        if not self._background_rendered:
+            self.engine.set_layer('background')
+            self.draw_background()
+            self._background_rendered = True
 
-        # 绘制背景
-        self.draw_background()
+        self.engine.clear('content')
+        self.engine.set_layer('content')
 
         # 根据模式绘制内容
         if self.state.mode == Mode.INTRO:
@@ -135,8 +145,13 @@ class App:
             ['T', [0.5, 0.5, '美食绘卷'], {'font_size': 36, 'color': rgb(139, 69, 19)}],
             # 副标题
             ['T', [0.5, 0.35, '一河通南北，五味见四时'], {'font_size': 18, 'color': rgb(100, 100, 100)}],
-            # 提示
-            ['T', [0.5, 0.2, '按 Enter 或点击开始'], {'font_size': 14, 'color': rgb(150, 150, 150)}],
+            # 悬浮按钮
+            ['RR', [.385, .155, .23, .075, .028], {
+                'fill': rgb(201, 48, 44) if self.hovered_item == ('start', 0) else rgb(139, 69, 19),
+                'stroke': rgb(225, 184, 105), 'stroke_width': 2,
+            }],
+            ['T', [0.5, 0.177, '启 程'], {'font_size': 15, 'font_weight': 'bold', 'color': rgb(255, 248, 229)}],
+            ['T', [0.5, 0.12, 'Enter 或点击'], {'font_size': 10, 'color': rgb(150, 138, 116)}],
         ]
         self.parser.parse(data, self.bounds)
 
@@ -175,6 +190,8 @@ class App:
 
             # 城市圆圈
             fill_color = color if i == self.state.current_city else rgb(200, 200, 200)
+            if self.hovered_item == ('city', i):
+                data.append(['C', [x, y, 0.069], {'fill': rgb(239, 221, 180), 'stroke': color, 'stroke_width': 2}])
             data.append(['C', [x, y, 0.058], {'fill': rgb(245, 240, 220), 'stroke': color, 'stroke_width': 2}])
             data.append(['C', [x, y, 0.040], {'fill': fill_color}])
 
@@ -211,7 +228,8 @@ class App:
             x = 0.3 + i * 0.4
             y = 0.5
 
-            data.extend(self._food_medallion(x, y, food_data['id'], i == self.state.current_food))
+            highlighted = i == self.state.current_food or self.hovered_item == ('food', i)
+            data.extend(self._food_medallion(x, y, food_data['id'], highlighted))
 
             # 美食名
             data.append(['T', [x, y - 0.15, food_data['name']], {'font_size': 14, 'color': rgb(50, 50, 50)}])
@@ -353,6 +371,31 @@ class App:
         """H 键"""
         self.machine.toggle_help()
         self.render()
+
+    def on_motion(self, x, y):
+        """Update semantic hover state without redrawing for every pixel."""
+        nx, ny = x / CANVAS_WIDTH, y / CANVAS_HEIGHT
+        hovered = None
+
+        if not self.state.help_open and self.state.mode == Mode.INTRO:
+            if .35 <= nx <= .65 and .14 <= ny <= .26:
+                hovered = ('start', 0)
+        elif not self.state.help_open and self.state.mode == Mode.MAP:
+            positions = [(.17, .78), (.30, .69), (.55, .43), (.80, .28), (.74, .14)]
+            for index, (px, py) in enumerate(positions):
+                if (px - nx) ** 2 + (py - ny) ** 2 <= .006:
+                    hovered = ('city', index)
+                    break
+        elif not self.state.help_open and self.state.mode == Mode.CITY:
+            if .16 <= nx <= .44 and .36 <= ny <= .64:
+                hovered = ('food', 0)
+            elif .56 <= nx <= .84 and .36 <= ny <= .64:
+                hovered = ('food', 1)
+
+        self.engine.set_cursor('hand2' if hovered is not None else '')
+        if hovered != self.hovered_item:
+            self.hovered_item = hovered
+            self.render()
 
     def on_click(self, x, y):
         """鼠标点击"""

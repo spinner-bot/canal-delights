@@ -389,6 +389,50 @@ def line_intersection(
     return (x, y)
 
 
+def clip_polygon_to_projection_band(
+    polygon: List[Point],
+    axis: Point,
+    lower: float,
+    upper: float,
+) -> List[Point]:
+    """Clip a polygon to ``lower <= dot(point, axis) <= upper``.
+
+    This is the convex half-plane operation needed by linear-gradient bands.
+    It also behaves predictably for the concave shapes used by this project,
+    although a band may be returned as one connected polygon.
+    """
+    def projection(point: Point) -> float:
+        return point[0] * axis[0] + point[1] * axis[1]
+
+    def clip(points: List[Point], threshold: float, keep_greater: bool) -> List[Point]:
+        if not points:
+            return []
+        output = []
+        previous = points[-1]
+        previous_value = projection(previous)
+        previous_inside = previous_value >= threshold if keep_greater else previous_value <= threshold
+
+        for current in points:
+            current_value = projection(current)
+            current_inside = current_value >= threshold if keep_greater else current_value <= threshold
+            if current_inside != previous_inside:
+                denominator = current_value - previous_value
+                if abs(denominator) > 1e-12:
+                    ratio = (threshold - previous_value) / denominator
+                    output.append((
+                        previous[0] + (current[0] - previous[0]) * ratio,
+                        previous[1] + (current[1] - previous[1]) * ratio,
+                    ))
+            if current_inside:
+                output.append(current)
+            previous = current
+            previous_value = current_value
+            previous_inside = current_inside
+        return output
+
+    return clip(clip(list(polygon), lower, True), upper, False)
+
+
 # ============================================
 # 渐变裁切
 # ============================================

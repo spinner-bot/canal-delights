@@ -18,6 +18,7 @@ from .styles import (
 from .geometry import (
     sample_ellipse, sample_cubic_bezier, sample_quadratic_bezier,
     polygon_bounds, clip_polygon_by_line, line_intersection,
+    clip_polygon_to_projection_band,
 )
 
 
@@ -49,6 +50,8 @@ class DrawingEngine:
         self.pen.hideturtle()
         self.pen.speed(0)
         self.pen.up()
+        self._active_layer = 'content'
+        self._pens = {'content': self.pen}
 
         # 设置背景色
         from ..config import CANVAS_BG
@@ -58,10 +61,27 @@ class DrawingEngine:
     # 基础控制
     # ============================================
 
-    def clear(self):
-        """清空画布"""
-        self.pen.clear()
-        self.pen.up()
+    def set_layer(self, name: str):
+        """Select a retained drawing layer, creating its Turtle lazily."""
+        if not name:
+            raise ValueError('图层名不能为空')
+        if name not in self._pens:
+            pen = turtle.Turtle()
+            pen.hideturtle()
+            pen.speed(0)
+            pen.up()
+            self._pens[name] = pen
+        self._active_layer = name
+        self.pen = self._pens[name]
+
+    def clear(self, layer: Optional[str] = None):
+        """Clear one retained layer, or every layer when omitted."""
+        pens = [self._pens[layer]] if layer in self._pens else []
+        if layer is None:
+            pens = list(self._pens.values())
+        for pen in pens:
+            pen.clear()
+            pen.up()
 
     def update(self):
         """手动刷新屏幕"""
@@ -86,6 +106,18 @@ class DrawingEngine:
     def listen(self):
         """开始监听键盘"""
         self.screen.listen()
+
+    def on_motion(self, callback):
+        """Bind pointer movement using the same world coordinates as Turtle."""
+        def event_handler(event):
+            x = self.screen.cv.canvasx(event.x) / self.screen.xscale
+            y = -self.screen.cv.canvasy(event.y) / self.screen.yscale
+            callback(x, y)
+        self.screen.cv.bind('<Motion>', event_handler)
+
+    def set_cursor(self, cursor: str = ''):
+        """Set the window cursor; supported identically by both backends."""
+        self.screen.cv.configure(cursor=cursor)
 
     # ============================================
     # 基础图形
@@ -430,11 +462,29 @@ class DrawingEngine:
         angle: float,
         steps: int,
     ):
-        """线性渐变填充 - 简化实现：用中间色填充"""
-        # 简化实现：取渐变中间色作为填充
-        # TODO: 实现完整的渐变裁切
-        color = interpolate_gradient_stops(stops, 0.5)
-        self._fill_polygon(polygon, color)
+        """Render clipped parallel color bands inside the target polygon."""
+        if len(polygon) < 3:
+            return
+        count = max(2, min(128, int(steps)))
+        radians = math.radians(angle)
+        axis = (math.cos(radians), math.sin(radians))
+        projections = [x * axis[0] + y * axis[1] for x, y in polygon]
+        low, high = min(projections), max(projections)
+        span = high - low
+        if span <= 1e-9:
+            self._fill_polygon(polygon, interpolate_gradient_stops(stops, 0.5))
+            return
+
+        # A tiny overlap prevents hairline gaps caused by Canvas rounding.
+        overlap = span / count * 0.015
+        for index in range(count):
+            t0 = index / count
+            t1 = (index + 1) / count
+            band = clip_polygon_to_projection_band(
+                polygon, axis, low + span * t0 - overlap, low + span * t1 + overlap,
+            )
+            if len(band) >= 3:
+                self._fill_polygon(band, interpolate_gradient_stops(stops, (t0 + t1) / 2))
 
     def _draw_radial_gradient(
         self,
@@ -444,11 +494,19 @@ class DrawingEngine:
         steps: int,
         bounds: Tuple[float, float, float, float],
     ):
-        """径向渐变填充 - 简化实现：用中心色填充"""
-        # 简化实现：取渐变中心色作为填充
-        # TODO: 实现完整的径向渐变裁切
-        color = interpolate_gradient_stops(stops, 0.0)
-        self._fill_polygon(polygon, color)
+        """Render a radial gradient as nested, silhouette-clipped polygons."""
+        if len(polygon) < 3:
+            return
+        count = max(2, min(128, int(steps)))
+        min_x, min_y, max_x, max_y = polygon_bounds(polygon)
+        fx = min_x + (max_x - min_x) * float(center[0])
+        fy = min_y + (max_y - min_y) * float(center[1])
+
+        self._fill_polygon(polygon, interpolate_gradient_stops(stops, 1.0))
+        for index in reversed(range(count)):
+            scale = (index + 1) / count
+            inset = [(fx + (x - fx) * scale, fy + (y - fy) * scale) for x, y in polygon]
+            self._fill_polygon(inset, interpolate_gradient_stops(stops, index / count))
 
     def _clip_to_polygon(
         self,
