@@ -8,9 +8,8 @@ from .state import AppState, StateMachine, Mode
 from .core.backend import RenderMode, create_engine
 from .core.animation import AnimationClock, SceneTransition
 from .core.navigation import BoatPhysics, CITY_POINTS, ROUTE_SEGMENTS, route_point, route_tangent
-from .core.particles import ParticleSystem
 from .core.renderer import DrawingDataParser
-from .config import rgb, CANVAS_WIDTH, CANVAS_HEIGHT, CANVAS_BG
+from .config import linear_gradient, rgb, CANVAS_WIDTH, CANVAS_HEIGHT, CANVAS_BG
 from .content.catalog import get_city, get_food
 from .content.scenes import FOOD_POSITIONS, get_city_scene
 from .content.foods.prototype import get_food_drawing
@@ -31,15 +30,9 @@ class App:
             self.engine.screen, fps=30 if self.engine.mode_name == 'accelerated' else 15,
         )
         self.boat = BoatPhysics()
-        self.particles = ParticleSystem(limit=72 if self.engine.mode_name == 'accelerated' else 18)
-        self.ambient_particles = ParticleSystem(
-            seed=2048, limit=48 if self.engine.mode_name == 'accelerated' else 12,
-        )
         self.transition = SceneTransition()
         self.move_direction = 0
         self.animation_phase = 0.0
-        self._splash_elapsed = 0.0
-        self._ambient_elapsed = 0.0
 
     def run(self):
         """运行应用"""
@@ -101,8 +94,6 @@ class App:
         elif self.state.mode == Mode.FINALE:
             self.draw_finale()
 
-        self.parser.parse(self.ambient_particles.drawing_data(), self.bounds)
-
         if self.state.mode != Mode.INTRO:
             self.draw_back_button()
 
@@ -162,12 +153,14 @@ class App:
 
     def draw_intro(self):
         """绘制开场"""
+        bob = math.sin(self.animation_phase * 2.2) * .004
         data = [
             ['B', [[.08,.29],[.28,.45],[.60,.13],[.91,.31]], {'stroke': rgb(102, 155, 167), 'stroke_width': 28}],
             ['B', [[.08,.29],[.28,.45],[.60,.13],[.91,.31]], {'stroke': rgb(188, 222, 221), 'stroke_width': 3}],
-            ['G', [[.17,.31],[.23,.36],[.29,.31]], {'fill': rgb(102, 63, 37)}],
-            ['L', [[.23,.36],[.23,.43]], {'stroke': rgb(82, 57, 38), 'stroke_width': 2}],
-            ['G', [[.23,.42],[.28,.39],[.23,.36]], {'fill': rgb(201, 48, 44)}],
+            ['G', [[.17,.31+bob],[.23,.36+bob],[.29,.31+bob]], {'fill': rgb(102, 63, 37)}],
+            ['L', [[.23,.36+bob],[.23,.43+bob]], {'stroke': rgb(82, 57, 38), 'stroke_width': 2}],
+            ['G', [[.23,.42+bob],[.28,.39+bob],[.23,.36+bob]], {'fill': rgb(201, 48, 44)}],
+            ['B', [[.13,.278-bob],[.19,.265+bob],[.26,.27-bob],[.33,.275]], {'stroke': rgb(198, 222, 215), 'stroke_width': 2}],
             # 标题
             ['T', [0.5, 0.6, '运河四季'], {'font_size': 48, 'color': rgb(139, 69, 19)}],
             ['T', [0.5, 0.5, '美食绘卷'], {'font_size': 36, 'color': rgb(139, 69, 19)}],
@@ -196,12 +189,29 @@ class App:
 
         nearby_city = self.boat.nearby_city()
         data = [
+            ['R', [.034, .043, .932, .914], {'gradient': linear_gradient([
+                [rgb(239, 230, 205), 0.0], [rgb(250, 244, 225), .48], [rgb(226, 218, 192), 1.0],
+            ], angle=25, steps=18 if self.engine.mode_name == 'accelerated' else 8), 'z': -20}],
             ['PATH', route_commands, {'stroke': rgb(94, 155, 170), 'stroke_width': 40}],
             ['PATH', route_commands, {'stroke': rgb(181, 220, 220), 'stroke_width': 27}],
             ['PATH', route_commands, {'stroke': rgb(226, 242, 235), 'stroke_width': 3}],
             ['T', [0.5, 0.9, '运河地图'], {'font_size': 28, 'color': rgb(50, 50, 50)}],
             ['T', [0.5, 0.845, '驾一叶轻舟，循水寻味'], {'font_size': 13, 'color': rgb(122, 101, 75)}],
         ]
+
+        # Low-contrast brocade and water-line motifs give the map depth without
+        # competing with the route or behaving like free-floating particles.
+        pattern = rgb(218, 204, 170)
+        for index in range(6):
+            y = .18 + index * .115
+            offset = .012 * math.sin(self.animation_phase * .55 + index)
+            data.append(['B', [[.07, y], [.28, y + .045 + offset], [.68, y - .035], [.94, y + .010]],
+                         {'stroke': pattern, 'stroke_width': 1, 'z': -10}])
+        for x, y in ((.10,.76),(.88,.76),(.13,.15),(.88,.17)):
+            data.extend([
+                ['A', [x, y, .040, 15, 165], {'stroke': rgb(207, 186, 143), 'stroke_width': 2, 'z': -10}],
+                ['A', [x + .050, y, .032, 20, 160], {'stroke': rgb(207, 186, 143), 'stroke_width': 2, 'z': -10}],
+            ])
 
         # 城市节点
         for i, (city, color) in enumerate(zip(cities, colors)):
@@ -228,13 +238,28 @@ class App:
             if i in self.state.stamped_cities:
                 data.append(['T', [x, y + 0.02, '✓'], {'font_size': 20, 'color': rgb(255, 0, 0)}])
 
-        # Boat and motion particles are regular scene data, so both rendering
-        # modes present the same navigation state.
-        data.extend(self.particles.drawing_data())
         boat_x, boat_y = route_point(self.boat.position)
         tangent_x, tangent_y = route_tangent(self.boat.position)
         boat_angle = math.degrees(math.atan2(tangent_y * CANVAS_HEIGHT, tangent_x * CANVAS_WIDTH))
         bob = math.sin(self.animation_phase * 5) * .003
+        direction = 1 if self.boat.velocity >= 0 else -1
+        wake_strength = min(1.0, abs(self.boat.velocity) / .12)
+        tail_x = boat_x - tangent_x * direction * (.035 + .025 * wake_strength)
+        tail_y = boat_y - tangent_y * direction * (.035 + .025 * wake_strength)
+        normal_x, normal_y = -tangent_y, tangent_x
+        if wake_strength > .05:
+            data.extend([
+                ['B', [[boat_x, boat_y - .016],
+                       [tail_x + normal_x*.020, tail_y + normal_y*.020],
+                       [tail_x + normal_x*.035, tail_y + normal_y*.035],
+                       [tail_x - tangent_x*direction*.035, tail_y - tangent_y*direction*.035]],
+                 {'stroke': rgb(226, 241, 233), 'stroke_width': 2}],
+                ['B', [[boat_x, boat_y - .016],
+                       [tail_x - normal_x*.020, tail_y - normal_y*.020],
+                       [tail_x - normal_x*.035, tail_y - normal_y*.035],
+                       [tail_x - tangent_x*direction*.035, tail_y - tangent_y*direction*.035]],
+                 {'stroke': rgb(134, 184, 187), 'stroke_width': 2}],
+            ])
         data.append(['GR', [
             ['E', [boat_x, boat_y - .018 + bob, .050, .012], {'fill': rgb(111, 170, 181)}],
             ['G', [[boat_x - .047, boat_y + bob], [boat_x + .047, boat_y + bob],
@@ -437,7 +462,6 @@ class App:
             action()
             self.state.transition_locked = True
             self.hovered_item = None
-            self.ambient_particles.clear()
 
         self.transition.start(switch_scene)
 
@@ -503,68 +527,20 @@ class App:
         self.move_direction = 0
 
     def on_animation_frame(self, delta_seconds):
-        """Drive ambient motion, boat physics and particles from one clock."""
+        """Drive restrained vector motion, boat physics and transitions."""
         self.animation_phase += delta_seconds
         was_transitioning = self.transition.active
         self.transition.step(delta_seconds)
         if was_transitioning and not self.transition.active:
             self.state.transition_locked = False
 
-        self.ambient_particles.step(delta_seconds)
-        self._ambient_elapsed += delta_seconds
-        interval = .16 if self.engine.mode_name == 'accelerated' else .34
-        if self._ambient_elapsed >= interval:
-            self.emit_ambient_particle()
-            self._ambient_elapsed = 0.0
-
         if self.state.mode == Mode.MAP:
-            moved = self.boat.step(self.move_direction, delta_seconds)
-            self.particles.step(delta_seconds)
-            self._splash_elapsed += delta_seconds
-            if moved and abs(self.boat.velocity) > .012 and self._splash_elapsed >= .065:
-                x, y = route_point(self.boat.position)
-                self.particles.emit_splash(
-                    x, y - .018, 1 if self.boat.velocity >= 0 else -1,
-                    3 if self.engine.mode_name == 'accelerated' else 1,
-                )
-                self._splash_elapsed = 0.0
+            self.boat.step(self.move_direction, delta_seconds)
             nearby = self.boat.nearby_city()
             if nearby is not None:
                 self.state.current_city = nearby
         self.render()
         return True
-
-    def emit_ambient_particle(self):
-        """Emit restrained, scene-specific atmosphere rather than confetti."""
-        randomizer = self.ambient_particles.random
-        if self.state.mode == Mode.INTRO:
-            self.ambient_particles.emit_drift(
-                randomizer.uniform(.12, .88), randomizer.uniform(.24, .34), rgb(173, 207, 205),
-                vy=(.010, .025), life=(1.5, 2.8), size=(.002, .005),
-            )
-        elif self.state.mode == Mode.MAP:
-            leaf = rgb(155, 142, 67) if randomizer.random() < .5 else rgb(99, 142, 91)
-            self.ambient_particles.emit_drift(
-                randomizer.uniform(.12, .90), randomizer.uniform(.55, .86), leaf,
-                vx=(-.025, -.010), vy=(-.030, -.012), life=(1.8, 3.2), size=(.003, .007),
-            )
-        elif self.state.mode == Mode.CITY:
-            theme = get_city(self.state.current_city)['theme']
-            soft_theme = tuple(int((channel + 245) / 2) for channel in theme)
-            self.ambient_particles.emit_drift(
-                randomizer.uniform(.12, .88), randomizer.uniform(.24, .38), soft_theme,
-                vy=(.018, .040), life=(1.3, 2.4), size=(.002, .005),
-            )
-        elif self.state.mode == Mode.FOOD_DETAIL:
-            self.ambient_particles.emit_drift(
-                .20, .73, rgb(205, 207, 200), count=2,
-                vx=(-.010, .010), vy=(.030, .060), life=(1.0, 1.8), size=(.003, .007),
-            )
-        elif self.state.mode == Mode.FINALE:
-            self.ambient_particles.emit_drift(
-                randomizer.uniform(.10, .90), .88, rgb(201, 75, 67),
-                vx=(-.025, .015), vy=(-.055, -.028), life=(2.2, 3.8), size=(.004, .008),
-            )
 
     def on_help(self):
         """H 键"""
