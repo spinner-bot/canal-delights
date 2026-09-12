@@ -12,6 +12,7 @@ from .core.particles import ParticleSystem
 from .core.renderer import DrawingDataParser
 from .config import rgb, CANVAS_WIDTH, CANVAS_HEIGHT, CANVAS_BG
 from .content.catalog import get_city, get_food
+from .content.scenes import FOOD_POSITIONS, get_city_scene
 from .content.foods.prototype import get_food_drawing
 
 
@@ -278,28 +279,40 @@ class App:
         city = city_data['name']
 
         theme = city_data['theme']
-        data = [
-            ['R', [.08,.34,.84,.34], {'fill': rgb(236, 228, 201), 'stroke': theme, 'stroke_width': 1}],
-            ['B', [[.09,.38],[.30,.46],[.52,.36],[.91,.43]], {'stroke': rgb(151, 194, 193), 'stroke_width': 17}],
-            ['B', [[.09,.38],[.30,.46],[.52,.36],[.91,.43]], {'stroke': rgb(218, 235, 226), 'stroke_width': 2}],
-            # 城市标题
-            ['T', [0.5, 0.85, f'{city}·食味'], {'font_size': 32, 'color': rgb(50, 50, 50)}],
-        ]
+        data = get_city_scene(
+            city_data['id'], theme, self.animation_phase,
+            gradient_steps=14 if self.engine.mode_name == 'accelerated' else 6,
+        )
+        data.append(['T', [0.5, 0.86, f'{city} · 城市食景'], {
+            'font_size': 30, 'font_weight': 'bold', 'color': rgb(50, 50, 50),
+        }])
+        data.append(['T', [0.5, 0.815, '寻访散落在城中的两道时味'], {
+            'font_size': 11, 'color': rgb(130, 112, 85),
+        }])
 
         # 两道美食
         for i in range(2):
             food_data = city_data['foods'][i]
-            x = 0.3 + i * 0.4
-            y = 0.5
+            x, y = FOOD_POSITIONS[city_data['id']][i]
 
-            highlighted = i == self.state.current_food or self.hovered_item == ('food', i)
-            data.extend(self._food_medallion(x, y, food_data['id'], highlighted))
+            hovered = self.hovered_item == ('food', i)
+            highlighted = i == self.state.current_food or hovered
+            medallion = self._food_medallion(x, y, food_data['id'], highlighted)
+            if hovered:
+                data.append(['GR', medallion, {'transform': {
+                    'scale': [1.08, 1.08], 'pivot': [x, y],
+                }}])
+            else:
+                data.extend(medallion)
 
             # 美食名
             data.append(['T', [x, y - 0.15, food_data['name']], {'font_size': 14, 'color': rgb(50, 50, 50)}])
+            if f'{self.state.current_city}_{i}' in self.state.discovered_foods:
+                data.append(['C', [x + .075, y + .070, .023], {'fill': rgb(176, 45, 39), 'stroke': rgb(246, 220, 160), 'stroke_width': 1}])
+                data.append(['T', [x + .075, y + .061, '✓'], {'font_size': 10, 'color': rgb(255, 246, 224)}])
 
         # 提示
-        data.append(['T', [0.5, 0.2, '←/→ 选择  Enter 查看  Esc 返回'],
+        data.append(['T', [0.5, 0.12, '悬浮预览 · 点击探索 · ←/→ 切换'],
                     {'font_size': 12, 'color': rgb(150, 150, 150)}])
 
         self.parser.parse(data, self.bounds)
@@ -580,10 +593,11 @@ class App:
             elif self.boat.nearby_city() is not None and .79 <= nx <= .91 and .70 <= ny <= .78:
                 hovered = ('explore', self.boat.nearby_city())
         elif not self.state.help_open and self.state.mode == Mode.CITY:
-            if .16 <= nx <= .44 and .36 <= ny <= .64:
-                hovered = ('food', 0)
-            elif .56 <= nx <= .84 and .36 <= ny <= .64:
-                hovered = ('food', 1)
+            city_id = get_city(self.state.current_city)['id']
+            for index, (px, py) in enumerate(FOOD_POSITIONS[city_id]):
+                if (px - nx) ** 2 + (py - ny) ** 2 <= .018:
+                    hovered = ('food', index)
+                    break
         elif not self.state.help_open and self.state.mode == Mode.FOOD_DETAIL:
             if .73 <= nx <= .91 and .16 <= ny <= .25:
                 hovered = ('taste', 0)
@@ -620,13 +634,12 @@ class App:
                 self.state.current_city = self.boat.nearby_city()
                 self.begin_transition(self.machine.enter_city)
         elif self.state.mode == Mode.CITY:
-            # The two dishes are deliberately generous click targets.
-            if .16 <= nx <= .44 and .36 <= ny <= .64:
-                self.state.current_food = 0
-                self.begin_transition(self.machine.open_food)
-            elif .56 <= nx <= .84 and .36 <= ny <= .64:
-                self.state.current_food = 1
-                self.begin_transition(self.machine.open_food)
+            city_id = get_city(self.state.current_city)['id']
+            for index, (px, py) in enumerate(FOOD_POSITIONS[city_id]):
+                if (px - nx) ** 2 + (py - ny) ** 2 <= .018:
+                    self.state.current_food = index
+                    self.begin_transition(self.machine.open_food)
+                    break
         elif self.state.mode == Mode.FOOD_DETAIL:
             if .73 <= nx <= .91 and .16 <= ny <= .25:
                 self.begin_transition(self.machine.complete_tasting)
