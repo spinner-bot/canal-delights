@@ -296,8 +296,11 @@ class DrawingDataParser:
             return
 
         abs_x, abs_y = self._transform_point((geo[0], geo[1]), bounds, None)
-        w = self._transform_size(geo[2], bounds)
-        h = self._transform_size(geo[3], bounds)
+        # Width and height are axis-specific.  Using the short edge for both
+        # made every rectangle (including the scroll frame) too narrow on the
+        # 1200 × 800 canvas.
+        w = geo[2] * bounds[2]
+        h = geo[3] * bounds[3]
 
         fill, stroke, stroke_width, gradient = self._get_fill_and_stroke(style)
 
@@ -314,8 +317,10 @@ class DrawingDataParser:
         """渲染圆角矩形: [x, y, w, h, radius]"""
         # x, y 是位置，需要用 normalized_to_absolute
         x, y = self._transform_point((geo[0], geo[1]), bounds, transform)
-        w = self._transform_size(geo[2], bounds)
-        h = self._transform_size(geo[3], bounds)
+        # Rectangular dimensions follow their respective canvas axes; only the
+        # corner radius remains based on the short edge.
+        w = geo[2] * bounds[2]
+        h = geo[3] * bounds[3]
         r = self._transform_size(geo[4], bounds)
 
         abs_x = bounds[0] + x

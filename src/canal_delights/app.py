@@ -85,8 +85,8 @@ class App:
             ['R', [0, 0, 1, 1], {'fill': CANVAS_BG}],
             # paper fibres and an understated double border make every scene
             # read as one scroll instead of a white application window.
-            ['R', [0.025, 0.03, 0.95, 0.94], {'stroke': rgb(186, 148, 86), 'stroke_width': 2}],
-            ['R', [0.04, 0.045, 0.92, 0.91], {'stroke': rgb(219, 193, 142), 'stroke_width': 1}],
+            ['R', [0.018, 0.025, 0.964, 0.95], {'stroke': rgb(164, 121, 62), 'stroke_width': 3}],
+            ['R', [0.032, 0.041, 0.936, 0.918], {'stroke': rgb(218, 187, 126), 'stroke_width': 1}],
         ]
         for x, y in ((.10,.13),(.22,.84),(.39,.09),(.67,.88),(.88,.18),(.92,.72)):
             data.append(['E', [x, y, .035, .006], {'fill': rgb(237, 228, 204)}])
@@ -147,10 +147,12 @@ class App:
 
         # 标题
         data = [
-            ['B', [[.10,.20],[.24,.36],[.40,.27],[.55,.58]], {'stroke': rgb(117, 172, 184), 'stroke_width': 36}],
-            ['B', [[.55,.58],[.70,.72],[.81,.56],[.91,.77]], {'stroke': rgb(117, 172, 184), 'stroke_width': 36}],
-            ['B', [[.10,.20],[.24,.36],[.40,.27],[.55,.58]], {'stroke': rgb(208, 233, 229), 'stroke_width': 3}],
-            ['B', [[.55,.58],[.70,.72],[.81,.56],[.91,.77]], {'stroke': rgb(208, 233, 229), 'stroke_width': 3}],
+            # North to south: Beijing starts at the upper-left, then the canal
+            # descends towards Hangzhou at the lower-right.
+            ['B', [[.10,.78],[.23,.66],[.39,.48],[.55,.39]], {'stroke': rgb(117, 172, 184), 'stroke_width': 36}],
+            ['B', [[.55,.39],[.69,.31],[.80,.25],[.91,.16]], {'stroke': rgb(117, 172, 184), 'stroke_width': 36}],
+            ['B', [[.10,.78],[.23,.66],[.39,.48],[.55,.39]], {'stroke': rgb(208, 233, 229), 'stroke_width': 3}],
+            ['B', [[.55,.39],[.69,.31],[.80,.25],[.91,.16]], {'stroke': rgb(208, 233, 229), 'stroke_width': 3}],
             ['T', [0.5, 0.9, '运河地图'], {'font_size': 28, 'color': rgb(50, 50, 50)}],
             ['T', [0.5, 0.84, '循水而行，寻访五城时味'], {'font_size': 13, 'color': rgb(122, 101, 75)}],
         ]
@@ -158,7 +160,7 @@ class App:
         # 城市节点
         for i, (city, color) in enumerate(zip(cities, colors)):
             x = 0.15 + i * 0.175
-            y = (0.30, 0.47, 0.34, 0.62, 0.72)[i]
+            y = (0.78, 0.66, 0.48, 0.31, 0.16)[i]
 
             # 城市圆圈
             fill_color = color if i == self.state.current_city else rgb(200, 200, 200)
@@ -353,7 +355,7 @@ class App:
         elif self.state.mode == Mode.MAP:
             # City seals sit at fixed scene positions.  A click selects the
             # nearest seal; clicking the selected one opens that city.
-            positions = [(0.15, .30), (.325, .47), (.50, .34), (.675, .62), (.85, .72)]
+            positions = [(0.15, .78), (.325, .66), (.50, .48), (.675, .31), (.85, .16)]
             nx, ny = x / CANVAS_WIDTH, y / CANVAS_HEIGHT
             nearest = min(range(len(positions)), key=lambda i: (positions[i][0] - nx) ** 2 + (positions[i][1] - ny) ** 2)
             px, py = positions[nearest]
