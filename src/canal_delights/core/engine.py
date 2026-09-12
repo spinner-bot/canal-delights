@@ -313,6 +313,7 @@ class DrawingEngine:
         """
         points = []
         current_pos = (0, 0)
+        closed = False
 
         for cmd in commands:
             if not cmd:
@@ -348,9 +349,16 @@ class DrawingEngine:
             elif op == 'Z':
                 if points:
                     points.append(points[0])
+                    closed = True
 
         if points:
-            self._draw_filled_polygon(points, fill, stroke, stroke_width)
+            # An open PATH is a stroke, not a polygon.  The shared polygon
+            # helper always closes its outline, which used to add a spurious
+            # last-to-first segment to waterways and other open curves.
+            if fill and closed:
+                self._fill_polygon(points, fill)
+            if stroke:
+                self.draw_polyline(points, stroke, stroke_width, close=False)
 
     # ============================================
     # 文字
