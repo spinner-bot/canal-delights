@@ -147,17 +147,22 @@ class App:
 
         # 标题
         data = [
-            # A simplified geographic route: Beijing → Tianjin turns gently
-            # east, the canal then runs south to Yangzhou, before bending
-            # southeast to Suzhou and southwest to Hangzhou.
-            ['B', [[.17,.78],[.25,.83],[.23,.65],[.30,.69]], {'stroke': rgb(117, 172, 184), 'stroke_width': 36}],
-            ['B', [[.30,.69],[.37,.62],[.43,.49],[.55,.43]], {'stroke': rgb(117, 172, 184), 'stroke_width': 36}],
-            ['B', [[.55,.43],[.64,.38],[.70,.27],[.80,.28]], {'stroke': rgb(117, 172, 184), 'stroke_width': 36}],
-            ['B', [[.80,.28],[.79,.21],[.76,.18],[.74,.14]], {'stroke': rgb(117, 172, 184), 'stroke_width': 36}],
-            ['B', [[.17,.78],[.25,.83],[.23,.65],[.30,.69]], {'stroke': rgb(208, 233, 229), 'stroke_width': 3}],
-            ['B', [[.30,.69],[.37,.62],[.43,.49],[.55,.43]], {'stroke': rgb(208, 233, 229), 'stroke_width': 3}],
-            ['B', [[.55,.43],[.64,.38],[.70,.27],[.80,.28]], {'stroke': rgb(208, 233, 229), 'stroke_width': 3}],
-            ['B', [[.80,.28],[.79,.21],[.76,.18],[.74,.14]], {'stroke': rgb(208, 233, 229), 'stroke_width': 3}],
+            # One continuous Catmull–Rom-derived spline.  Its cubic controls
+            # make a single flowing waterway pass through all five city nodes.
+            ['PATH', [
+                ['M', .17, .78],
+                ['C', .1917, .7650, .2367, .7483, .30, .69],
+                ['C', .3633, .6317, .4667, .4983, .55, .43],
+                ['C', .6333, .3617, .7683, .3283, .80, .28],
+                ['C', .8317, .2317, .7500, .1633, .74, .14],
+            ], {'stroke': rgb(117, 172, 184), 'stroke_width': 36}],
+            ['PATH', [
+                ['M', .17, .78],
+                ['C', .1917, .7650, .2367, .7483, .30, .69],
+                ['C', .3633, .6317, .4667, .4983, .55, .43],
+                ['C', .6333, .3617, .7683, .3283, .80, .28],
+                ['C', .8317, .2317, .7500, .1633, .74, .14],
+            ], {'stroke': rgb(208, 233, 229), 'stroke_width': 3}],
             ['T', [0.5, 0.9, '运河地图'], {'font_size': 28, 'color': rgb(50, 50, 50)}],
             ['T', [0.5, 0.84, '循水而行，寻访五城时味'], {'font_size': 13, 'color': rgb(122, 101, 75)}],
         ]
