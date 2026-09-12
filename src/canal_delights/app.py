@@ -8,6 +8,7 @@ from .state import AppState, StateMachine, Mode
 from .core.backend import RenderMode, create_engine
 from .core.animation import AnimationClock, SceneTransition
 from .core.navigation import BoatPhysics, CITY_POINTS, ROUTE_SEGMENTS, route_point, route_tangent
+from .core.splash import SplashSystem
 from .core.renderer import DrawingDataParser
 from .config import linear_gradient, rgb, CANVAS_WIDTH, CANVAS_HEIGHT, CANVAS_BG
 from .content.catalog import get_city, get_food
@@ -30,9 +31,11 @@ class App:
             self.engine.screen, fps=30 if self.engine.mode_name == 'accelerated' else 15,
         )
         self.boat = BoatPhysics()
+        self.splash = SplashSystem(limit=36 if self.engine.mode_name == 'accelerated' else 10)
         self.transition = SceneTransition()
         self.move_direction = 0
         self.animation_phase = 0.0
+        self._splash_elapsed = 0.0
 
     def run(self):
         """运行应用"""
@@ -260,6 +263,7 @@ class App:
                        [tail_x - tangent_x*direction*.035, tail_y - tangent_y*direction*.035]],
                  {'stroke': rgb(134, 184, 187), 'stroke_width': 2}],
             ])
+        data.extend(self.splash.drawing_data())
         data.append(['GR', [
             ['E', [boat_x, boat_y - .018 + bob, .050, .012], {'fill': rgb(111, 170, 181)}],
             ['G', [[boat_x - .047, boat_y + bob], [boat_x + .047, boat_y + bob],
@@ -535,7 +539,17 @@ class App:
             self.state.transition_locked = False
 
         if self.state.mode == Mode.MAP:
-            self.boat.step(self.move_direction, delta_seconds)
+            moved = self.boat.step(self.move_direction, delta_seconds)
+            self.splash.step(delta_seconds)
+            self._splash_elapsed += delta_seconds
+            if moved and abs(self.boat.velocity) > .018 and self._splash_elapsed >= .075:
+                x, y = route_point(self.boat.position)
+                self.splash.emit(
+                    x, y - .018,
+                    1 if self.boat.velocity >= 0 else -1,
+                    2 if self.engine.mode_name == 'accelerated' else 1,
+                )
+                self._splash_elapsed = 0.0
             nearby = self.boat.nearby_city()
             if nearby is not None:
                 self.state.current_city = nearby
