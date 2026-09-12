@@ -85,13 +85,12 @@ canal-delights/
 ### 运行程序
 
 ```bash
-# 克隆项目
-git clone https://github.com/spinner-bot/canal-delights.git
-cd canal-delights
+# 首次使用：以可编辑方式安装本项目（没有第三方运行时依赖）
+python -m pip install -e .
 
-# 运行
-cd src
-python main.py
+# 启动互动绘卷
+python -m canal_delights
+# 或：python run.py
 ```
 
 ## ⌨️ 操作指南

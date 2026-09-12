@@ -4,12 +4,6 @@ Primitive Gallery - 展示所有 14 种基本图形类型
 运行：python examples/primitive_gallery.py
 """
 
-import sys
-import os
-
-# 添加 src 到路径
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
-
 from canal_delights.core.engine import DrawingEngine
 from canal_delights.core.renderer import DrawingDataParser
 from canal_delights.config import rgb, make_style, linear_gradient

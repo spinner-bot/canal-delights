@@ -83,12 +83,52 @@ class App:
         """绘制背景"""
         data = [
             ['R', [0, 0, 1, 1], {'fill': CANVAS_BG}],
+            # paper fibres and an understated double border make every scene
+            # read as one scroll instead of a white application window.
+            ['R', [0.025, 0.03, 0.95, 0.94], {'stroke': rgb(186, 148, 86), 'stroke_width': 2}],
+            ['R', [0.04, 0.045, 0.92, 0.91], {'stroke': rgb(219, 193, 142), 'stroke_width': 1}],
         ]
+        for x, y in ((.10,.13),(.22,.84),(.39,.09),(.67,.88),(.88,.18),(.92,.72)):
+            data.append(['E', [x, y, .035, .006], {'fill': rgb(237, 228, 204)}])
         self.parser.parse(data, self.bounds)
+
+    def _food_medallion(self, cx, cy, food_id, selected=False):
+        """Small, recognisable food illustration used by the city selection."""
+        rim = rgb(184, 134, 11) if selected else rgb(190, 180, 155)
+        data = [
+            ['E', [cx, cy - .065, .115, .028], {'fill': rgb(216, 205, 178)}],
+            ['C', [cx, cy, .105], {'fill': rgb(250, 248, 240), 'stroke': rim, 'stroke_width': 2}],
+        ]
+        golden = rgb(205, 133, 35)
+        if food_id in ('roast_duck', 'lion_head', 'west_lake_fish', 'squirrel_fish'):
+            data += [['E', [cx, cy, .073, .040], {'fill': rgb(159, 75, 37)}],
+                     ['G', [[cx + .065, cy], [cx + .10, cy + .035], [cx + .10, cy - .035]], {'fill': rgb(125, 57, 30)}],
+                     ['L', [[cx - .04, cy + .015], [cx + .04, cy + .015]], {'stroke': golden, 'stroke_width': 2}]]
+        elif food_id in ('baozi', 'soup_dumpling'):
+            data += [['C', [cx, cy, .067], {'fill': rgb(255, 248, 229), 'stroke': rgb(210, 194, 164), 'stroke_width': 1}],
+                     ['C', [cx, cy + .02, .014], {'fill': rgb(221, 195, 157)}]]
+            for offset in (-.04, -.02, .02, .04):
+                data.append(['L', [[cx, cy + .02], [cx + offset, cy - .035]], {'stroke': rgb(218, 202, 174), 'stroke_width': 1}])
+        elif food_id == 'longjing_tea':
+            data += [['RR', [cx - .055, cy - .035, .11, .07, .012], {'fill': rgb(237, 246, 223), 'stroke': rgb(102, 135, 63), 'stroke_width': 2}],
+                     ['E', [cx, cy - .005, .044, .015], {'fill': rgb(143, 180, 92)}]]
+        elif food_id == 'osmanthus_cake':
+            data += [['RR', [cx - .065, cy - .040, .13, .08, .012], {'fill': rgb(255, 237, 189), 'stroke': golden, 'stroke_width': 1}]]
+            for dx, dy in ((-.03,.01), (0,.02), (.03,-.01)):
+                data.append(['C', [cx + dx, cy + dy, .009], {'fill': rgb(226, 159, 30)}])
+        else:  # mooncake and mahua
+            data += [['C', [cx, cy, .065], {'fill': golden, 'stroke': rgb(159, 102, 28), 'stroke_width': 2}],
+                     ['RG', [cx, cy, .035, .050], {'stroke': rgb(240, 193, 79), 'stroke_width': 2}]]
+        return data
 
     def draw_intro(self):
         """绘制开场"""
         data = [
+            ['B', [[.08,.29],[.28,.45],[.60,.13],[.91,.31]], {'stroke': rgb(102, 155, 167), 'stroke_width': 28}],
+            ['B', [[.08,.29],[.28,.45],[.60,.13],[.91,.31]], {'stroke': rgb(188, 222, 221), 'stroke_width': 3}],
+            ['G', [[.17,.31],[.23,.36],[.29,.31]], {'fill': rgb(102, 63, 37)}],
+            ['L', [[.23,.36],[.23,.43]], {'stroke': rgb(82, 57, 38), 'stroke_width': 2}],
+            ['G', [[.23,.42],[.28,.39],[.23,.36]], {'fill': rgb(201, 48, 44)}],
             # 标题
             ['T', [0.5, 0.6, '运河四季'], {'font_size': 48, 'color': rgb(139, 69, 19)}],
             ['T', [0.5, 0.5, '美食绘卷'], {'font_size': 36, 'color': rgb(139, 69, 19)}],
@@ -107,17 +147,23 @@ class App:
 
         # 标题
         data = [
+            ['B', [[.10,.20],[.24,.36],[.40,.27],[.55,.58]], {'stroke': rgb(117, 172, 184), 'stroke_width': 36}],
+            ['B', [[.55,.58],[.70,.72],[.81,.56],[.91,.77]], {'stroke': rgb(117, 172, 184), 'stroke_width': 36}],
+            ['B', [[.10,.20],[.24,.36],[.40,.27],[.55,.58]], {'stroke': rgb(208, 233, 229), 'stroke_width': 3}],
+            ['B', [[.55,.58],[.70,.72],[.81,.56],[.91,.77]], {'stroke': rgb(208, 233, 229), 'stroke_width': 3}],
             ['T', [0.5, 0.9, '运河地图'], {'font_size': 28, 'color': rgb(50, 50, 50)}],
+            ['T', [0.5, 0.84, '循水而行，寻访五城时味'], {'font_size': 13, 'color': rgb(122, 101, 75)}],
         ]
 
         # 城市节点
         for i, (city, color) in enumerate(zip(cities, colors)):
             x = 0.15 + i * 0.175
-            y = 0.5
+            y = (0.30, 0.47, 0.34, 0.62, 0.72)[i]
 
             # 城市圆圈
             fill_color = color if i == self.state.current_city else rgb(200, 200, 200)
-            data.append(['C', [x, y, 0.05], {'fill': fill_color}])
+            data.append(['C', [x, y, 0.058], {'fill': rgb(245, 240, 220), 'stroke': color, 'stroke_width': 2}])
+            data.append(['C', [x, y, 0.040], {'fill': fill_color}])
 
             # 城市名
             data.append(['T', [x, y - 0.08, city], {'font_size': 14, 'color': rgb(50, 50, 50)}])
@@ -137,7 +183,11 @@ class App:
         city_data = get_city(self.state.current_city)
         city = city_data['name']
 
+        theme = city_data['theme']
         data = [
+            ['R', [.08,.34,.84,.34], {'fill': rgb(236, 228, 201), 'stroke': theme, 'stroke_width': 1}],
+            ['B', [[.09,.38],[.30,.46],[.52,.36],[.91,.43]], {'stroke': rgb(151, 194, 193), 'stroke_width': 17}],
+            ['B', [[.09,.38],[.30,.46],[.52,.36],[.91,.43]], {'stroke': rgb(218, 235, 226), 'stroke_width': 2}],
             # 城市标题
             ['T', [0.5, 0.85, f'{city}·食味'], {'font_size': 32, 'color': rgb(50, 50, 50)}],
         ]
@@ -148,9 +198,7 @@ class App:
             x = 0.3 + i * 0.4
             y = 0.5
 
-            # 占位圆
-            color = rgb(200, 200, 200) if i != self.state.current_food else rgb(255, 200, 100)
-            data.append(['C', [x, y, 0.1], {'fill': color}])
+            data.extend(self._food_medallion(x, y, food_data['id'], i == self.state.current_food))
 
             # 美食名
             data.append(['T', [x, y - 0.15, food_data['name']], {'font_size': 14, 'color': rgb(50, 50, 50)}])
@@ -243,7 +291,10 @@ class App:
         if self.state.mode == Mode.INTRO:
             self.machine.start_journey()
         elif self.state.mode == Mode.MAP:
-            self.machine.enter_city()
+            if self.state.is_all_stamped():
+                self.machine.go_to_finale()
+            else:
+                self.machine.enter_city()
         elif self.state.mode == Mode.CITY:
             self.machine.open_food()
         elif self.state.mode == Mode.FOOD_DETAIL:
@@ -299,7 +350,33 @@ class App:
 
         if self.state.mode == Mode.INTRO:
             self.machine.start_journey()
-            self.render()
+        elif self.state.mode == Mode.MAP:
+            # City seals sit at fixed scene positions.  A click selects the
+            # nearest seal; clicking the selected one opens that city.
+            positions = [(0.15, .30), (.325, .47), (.50, .34), (.675, .62), (.85, .72)]
+            nx, ny = x / CANVAS_WIDTH, y / CANVAS_HEIGHT
+            nearest = min(range(len(positions)), key=lambda i: (positions[i][0] - nx) ** 2 + (positions[i][1] - ny) ** 2)
+            px, py = positions[nearest]
+            if (px - nx) ** 2 + (py - ny) ** 2 < .012:
+                if nearest == self.state.current_city:
+                    if self.state.is_all_stamped():
+                        self.machine.go_to_finale()
+                    else:
+                        self.machine.enter_city()
+                else:
+                    self.state.current_city = nearest
+        elif self.state.mode == Mode.CITY:
+            # The two dishes are deliberately generous click targets.
+            nx = x / CANVAS_WIDTH
+            if .16 <= nx <= .44:
+                self.state.current_food = 0
+                self.machine.open_food()
+            elif .56 <= nx <= .84:
+                self.state.current_food = 1
+                self.machine.open_food()
+        elif self.state.mode == Mode.FOOD_DETAIL:
+            self.machine.complete_tasting()
+        self.render()
 
 
 def main():

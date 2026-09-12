@@ -4,11 +4,6 @@
 
 import pytest
 import math
-import sys
-import os
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
-
 from canal_delights.core.geometry import (
     normalized_to_absolute,
     normalized_size_to_absolute,

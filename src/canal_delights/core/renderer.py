@@ -284,26 +284,20 @@ class DrawingDataParser:
 
     def _render_rect(self, geo: list, style: dict, bounds: Bounds, transform: Optional[dict]):
         """渲染矩形: [x, y, w, h]"""
-        # x, y 是位置，需要用 normalized_to_absolute
-        x, y = self._transform_point((geo[0], geo[1]), bounds, transform)
-        w = self._transform_size(geo[2], bounds)
-        h = self._transform_size(geo[3], bounds)
-
-        # 应用变换
+        # A transformed rectangle is no longer necessarily axis-aligned.
+        # Convert the original normalized corners once; the old implementation
+        # applied the transform to the origin and then to its corners again.
         if transform:
-            abs_points = [(bounds[0] + x, bounds[1] + y),
-                          (bounds[0] + x + w, bounds[1] + y),
-                          (bounds[0] + x + w, bounds[1] + y + h),
-                          (bounds[0] + x, bounds[1] + y + h)]
-            norm_points = [((p[0] - bounds[0]) / bounds[2],
-                            (p[1] - bounds[1]) / bounds[3])
-                           for p in abs_points]
-            points = self._transform_points(norm_points, bounds, transform)
+            points = self._transform_points([
+                (geo[0], geo[1]), (geo[0] + geo[2], geo[1]),
+                (geo[0] + geo[2], geo[1] + geo[3]), (geo[0], geo[1] + geo[3]),
+            ], bounds, transform)
             self._render_polygon_with_style(points, style, bounds, None)
             return
 
-        abs_x = bounds[0] + x
-        abs_y = bounds[1] + y
+        abs_x, abs_y = self._transform_point((geo[0], geo[1]), bounds, None)
+        w = self._transform_size(geo[2], bounds)
+        h = self._transform_size(geo[3], bounds)
 
         fill, stroke, stroke_width, gradient = self._get_fill_and_stroke(style)
 

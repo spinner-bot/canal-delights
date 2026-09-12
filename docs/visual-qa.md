@@ -12,18 +12,18 @@
 |--------|------|----------|----------|----------|------|------|
 | P | Point | ✅ | N/A | N/A | N/A | PASS |
 | L | Line | N/A | N/A | N/A | ✅ | PASS |
-| R | Rect | ✅ | ✅ | LIMITED | ✅ | PASS |
+| R | Rect | ✅ | LIMITED | LIMITED | ✅ | PASS |
 | RR | RoundedRect | ✅ | LIMITED | LIMITED | ✅ | PASS |
-| C | Circle | ✅ | ✅ | ✅ | ✅ | PASS |
-| E | Ellipse | ✅ | ✅ | ✅ | ✅ | PASS |
-| G | Polygon | ✅ | ✅ | LIMITED | ✅ | PASS |
+| C | Circle | ✅ | LIMITED | LIMITED | ✅ | PASS |
+| E | Ellipse | ✅ | LIMITED | LIMITED | ✅ | PASS |
+| G | Polygon | ✅ | LIMITED | LIMITED | ✅ | PASS |
 | A | Arc | N/A | N/A | N/A | ✅ | PASS |
 | Q | Quadratic | N/A | N/A | N/A | ✅ | PASS |
 | B | Cubic | N/A | N/A | N/A | ✅ | PASS |
 | PATH | CompoundPath | ✅ | LIMITED | LIMITED | ✅ | PASS |
 | RG | Ring | ✅ | LIMITED | ✅ | ✅ | PASS |
 | T | Text | ✅ | N/A | N/A | N/A | PASS |
-| GR | Group | ✅ | ✅ | ✅ | ✅ | PASS |
+| GR | Group | ✅ | LIMITED | LIMITED | ✅ | PASS |
 
 ### 状态说明
 
@@ -33,16 +33,14 @@
 
 ### 已知限制
 
-1. **径向渐变**：
-   - 目前用同心多边形近似，对非圆形轮廓裁切不完整
-   - 圆形和椭圆效果良好，任意多边形可能越界
+1. **渐变**：
+   - 当前实现只取一个代表色填充轮廓；并不绘制真正的线性或径向渐变。
+   - 正式资产目前不依赖渐变。将来实现色带裁切/同心轮廓后，才能把对应项标为 PASS。
 
 2. **圆角矩形 (RR)**：
    - 渐变填充简化为矩形边界，未精确裁切到圆角
 
-3. **渐变裁切**：
-   - 线性渐变实现了基于色带的裁切
-   - 复杂凹多边形的裁切可能不够精确
+3. **渐变裁切**：尚未实现；`clip_gradient_band` 也尚未接入渲染流程。
 
 ---
 
@@ -78,8 +76,8 @@
 **已验证项目：**
 - [x] 14 种类型码均可渲染
 - [x] 实色填充正确
-- [x] 线性渐变可见
-- [x] 径向渐变可见（圆形）
+- [ ] 线性渐变（未实现）
+- [ ] 径向渐变（未实现）
 - [x] 描边线宽可配置
 - [x] 文字渲染正常
 - [x] Group 组合正确
@@ -102,8 +100,8 @@
 
 ### 渐变系统
 
-- [x] 线性渐变 (angle, stops)
-- [x] 径向渐变 (center, stops)
+- [ ] 线性渐变（数据格式与颜色插值已实现，绘制未实现）
+- [ ] 径向渐变（数据格式与颜色插值已实现，绘制未实现）
 - [x] 多色标支持（2、3、5 个）
 - [x] 色标位置 0.0-1.0
 - [x] 颜色插值正确

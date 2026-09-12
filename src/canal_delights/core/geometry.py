@@ -81,6 +81,14 @@ def apply_transform(
     返回:
         变换后的点
     """
+    # A composed transform retains individual operations and pivots.  Merging
+    # the two dictionaries loses this information whenever transforms differ.
+    if transform and '_chain' in transform:
+        result = point
+        for step in transform['_chain']:
+            result = apply_transform(result, step, bounds)
+        return result
+
     x, y = point
 
     # 确定枢轴点（默认为中心）
@@ -132,15 +140,11 @@ def compose_transforms(parent: dict, child: dict) -> dict:
     """
     组合父子变换
 
-    简化实现：返回子变换（实际应做矩阵乘法）
-    TODO: 实现完整的矩阵组合
+    Child operations happen in local coordinates, followed by the parent.
+    A short chain is equivalent to matrix composition for points and preserves
+    distinct pivots without introducing a separate matrix representation.
     """
-    # 简化：子变换优先
-    result = parent.copy()
-    for key, value in child.items():
-        if value is not None:
-            result[key] = value
-    return result
+    return {'_chain': [child, parent]}
 
 
 # ============================================

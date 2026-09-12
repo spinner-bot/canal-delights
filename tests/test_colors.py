@@ -3,12 +3,6 @@
 """
 
 import pytest
-import sys
-import os
-
-# 添加 src 到路径
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
-
 from canal_delights.core.styles import (
     validate_rgb, validate_rgba, rgb_to_hex, rgb_to_turtle,
     premultiply_alpha, lerp_color, interpolate_gradient_stops,
