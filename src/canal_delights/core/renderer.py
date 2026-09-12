@@ -469,8 +469,8 @@ class DrawingDataParser:
         align = style.get('align', 'center')
         color = style.get('color', (0, 0, 0))
 
-        # 转换字号
-        abs_size = max(8, int(self._transform_size(font_size / 100, bounds) * 100))
+        # 字号直接使用，不做转换
+        abs_size = max(8, font_size)
 
         self.engine.draw_text(text, x, y, abs_size, color, font_family, align, font_weight)
 
