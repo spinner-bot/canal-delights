@@ -200,8 +200,15 @@ class DrawingDataParser:
         geometry = item['geometry']
         style = item['style']
 
-        # 处理 transform
-        transform = style.get('transform', parent_transform)
+        # Compose a local transform with its inherited parent exactly once.
+        # Groups used to pass their own transform as both parent and child,
+        # doubling scale/translation and sending nested artwork off-canvas.
+        local_transform = style.get('transform')
+        if parent_transform and local_transform:
+            from .geometry import compose_transforms
+            transform = compose_transforms(parent_transform, local_transform)
+        else:
+            transform = local_transform or parent_transform
 
         # 分发到具体渲染方法
         renderers = {
@@ -272,7 +279,10 @@ class DrawingDataParser:
     def _render_point(self, geo: list, style: dict, bounds: Bounds, transform: Optional[dict]):
         """渲染点: [x, y, size]"""
         x, y = self._transform_point((geo[0], geo[1]), bounds, transform)
-        size = self._scaled_size(geo[2], bounds, transform)
+        # ``P`` is a texture dot and its size is specified in pixels.  Treating
+        # values such as 2 or 3 as normalized units created canvas-sized blobs.
+        sx, sy = transform_scale(transform)
+        size = float(geo[2]) * min(abs(sx), abs(sy))
 
         fill, stroke, _, _ = self._get_fill_and_stroke(style)
         color = fill or stroke or (0, 0, 0)
@@ -479,17 +489,6 @@ class DrawingDataParser:
 
         self.engine.draw_text(text, x, y, abs_size, color, font_family, align, font_weight)
 
-    def _render_group(self, geo: list, style: dict, bounds: Bounds, parent_transform: Optional[dict]):
+    def _render_group(self, geo: list, style: dict, bounds: Bounds, transform: Optional[dict]):
         """渲染组: [children]"""
-        # 获取组的变换
-        group_transform = style.get('transform')
-
-        # 组合父变换和组变换
-        if parent_transform and group_transform:
-            from .geometry import compose_transforms
-            combined = compose_transforms(parent_transform, group_transform)
-        else:
-            combined = group_transform or parent_transform
-
-        # 递归渲染子元素
-        self.parse(geo, bounds, combined)
+        self.parse(geo, bounds, transform)
