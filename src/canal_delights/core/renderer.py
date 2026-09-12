@@ -291,15 +291,14 @@ class DrawingDataParser:
 
         # 应用变换
         if transform:
-            points = [(bounds[0] + x, bounds[1] + y),
-                      (bounds[0] + x + w, bounds[1] + y),
-                      (bounds[0] + x + w, bounds[1] + y + h),
-                      (bounds[0] + x, bounds[1] + y + h)]
-            points = self._transform_points(
-                [(p[0] - bounds[0]) / bounds[2], (p[1] - bounds[1]) / bounds[3]]
-                for p in points
-            , bounds, transform)
-            # 简化：直接用矩形
+            abs_points = [(bounds[0] + x, bounds[1] + y),
+                          (bounds[0] + x + w, bounds[1] + y),
+                          (bounds[0] + x + w, bounds[1] + y + h),
+                          (bounds[0] + x, bounds[1] + y + h)]
+            norm_points = [((p[0] - bounds[0]) / bounds[2],
+                            (p[1] - bounds[1]) / bounds[3])
+                           for p in abs_points]
+            points = self._transform_points(norm_points, bounds, transform)
             self._render_polygon_with_style(points, style, bounds, None)
             return
 
