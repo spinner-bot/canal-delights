@@ -3,7 +3,7 @@
 """
 
 from .state import AppState, StateMachine, Mode
-from .core.engine import DrawingEngine
+from .core.backend import RenderMode, create_engine
 from .core.renderer import DrawingDataParser
 from .config import rgb, CANVAS_WIDTH, CANVAS_HEIGHT, CANVAS_BG
 from .content.catalog import get_city, get_food
@@ -13,8 +13,8 @@ from .content.foods.prototype import get_food_drawing
 class App:
     """应用主类"""
 
-    def __init__(self):
-        self.engine = DrawingEngine(CANVAS_WIDTH, CANVAS_HEIGHT)
+    def __init__(self, render_mode=RenderMode.ACCELERATED):
+        self.engine = create_engine(render_mode, CANVAS_WIDTH, CANVAS_HEIGHT)
         self.parser = DrawingDataParser(self.engine)
         self.state = AppState()
         self.machine = StateMachine(self.state)
@@ -33,6 +33,7 @@ class App:
         print("  DETAIL: Enter 完成品鉴")
         print("  Esc:   返回上一级")
         print("  H:     帮助")
+        print(f"  渲染:  {self.engine.mode_name}")
         print()
 
         # 绑定键盘事件
@@ -391,9 +392,19 @@ class App:
         self.render()
 
 
-def main():
+def main(argv=None):
     """主程序入口"""
-    app = App()
+    import argparse
+    import os
+
+    parser = argparse.ArgumentParser(description='运河四季·美食绘卷')
+    parser.add_argument(
+        '--renderer', choices=[mode.value for mode in RenderMode],
+        default=os.environ.get('CANAL_RENDERER', RenderMode.ACCELERATED.value),
+        help='渲染后端：accelerated（默认）或 pure（纯 Turtle）',
+    )
+    args = parser.parse_args(argv)
+    app = App(args.renderer)
     app.run()
 
 
