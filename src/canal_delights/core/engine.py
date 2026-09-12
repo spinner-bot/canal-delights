@@ -187,20 +187,21 @@ class DrawingEngine:
         stroke: Optional[RGB] = None,
         stroke_width: float = 1.0,
     ):
-        """绘制圆角矩形"""
+        """绘制圆角矩形 (y轴向上)"""
         r = min(r, w / 2, h / 2)
         points = []
 
-        # 四个圆角
+        # 四个圆角 - 逆时针方向 (y轴向上)
         corners = [
-            (x + w - r, y + r, 0, 90),      # 右上
-            (x + w - r, y + h - r, 270, 360),  # 右下
-            (x + r, y + h - r, 180, 270),    # 左下
-            (x + r, y + r, 90, 180),         # 左上
+            # (center_x, center_y, start_angle, end_angle)
+            (x + w - r, y + r, 270, 360),     # 右下
+            (x + w - r, y + h - r, 0, 90),    # 右上
+            (x + r, y + h - r, 90, 180),      # 左上
+            (x + r, y + r, 180, 270),         # 左下
         ]
 
         for cx, cy, start, end in corners:
-            steps = 10
+            steps = 8
             for i in range(steps + 1):
                 angle = math.radians(start + (end - start) * i / steps)
                 px = cx + r * math.cos(angle)
@@ -420,66 +421,11 @@ class DrawingEngine:
         angle: float,
         steps: int,
     ):
-        """线性渐变填充"""
-        # 获取多边形边界
-        min_x, min_y, max_x, max_y = polygon_bounds(polygon)
-
-        # 计算渐变方向
-        rad = math.radians(angle)
-        dx = math.cos(rad)
-        dy = math.sin(rad)
-
-        # 计算渐变轴上的投影范围
-        projected = []
-        for p in polygon:
-            proj = (p[0] - min_x) * dx + (p[1] - min_y) * dy
-            projected.append(proj)
-
-        min_proj = min(projected)
-        max_proj = max(projected)
-        proj_range = max_proj - min_proj
-
-        if proj_range < 1e-6:
-            # 退化情况：用第一个颜色填充
-            color = interpolate_gradient_stops(stops, 0)
-            self._fill_polygon(polygon, color)
-            return
-
-        # 绘制色带
-        for i in range(steps):
-            t1 = i / steps
-            t2 = (i + 1) / steps
-
-            # 计算色带边界
-            proj1 = min_proj + proj_range * t1
-            proj2 = min_proj + proj_range * t2
-
-            # 插值颜色
-            color = interpolate_gradient_stops(stops, (t1 + t2) / 2)
-
-            # 计算色带的四个角点
-            perp_dx = -dy
-            perp_dy = dx
-
-            # 扩展范围确保覆盖
-            extension = max(max_x - min_x, max_y - min_y)
-
-            corners = [
-                (min_x + proj1 * dx - extension * perp_dx,
-                 min_y + proj1 * dy - extension * perp_dy),
-                (min_x + proj1 * dx + extension * perp_dx,
-                 min_y + proj1 * dy + extension * perp_dy),
-                (min_x + proj2 * dx + extension * perp_dx,
-                 min_y + proj2 * dy + extension * perp_dy),
-                (min_x + proj2 * dx - extension * perp_dx,
-                 min_y + proj2 * dy - extension * perp_dy),
-            ]
-
-            # 裁切到目标多边形
-            clipped = self._clip_to_polygon(corners, polygon)
-
-            if clipped:
-                self._fill_polygon(clipped, color)
+        """线性渐变填充 - 简化实现：用中间色填充"""
+        # 简化实现：取渐变中间色作为填充
+        # TODO: 实现完整的渐变裁切
+        color = interpolate_gradient_stops(stops, 0.5)
+        self._fill_polygon(polygon, color)
 
     def _draw_radial_gradient(
         self,
@@ -489,28 +435,11 @@ class DrawingEngine:
         steps: int,
         bounds: Tuple[float, float, float, float],
     ):
-        """径向渐变填充"""
-        min_x, min_y, max_x, max_y = polygon_bounds(polygon)
-        width = max_x - min_x
-        height = max_y - min_y
-
-        cx = min_x + width * center[0]
-        cy = min_y + height * center[1]
-        max_r = max(width, height) / 2
-
-        # 从外向内绘制同心多边形
-        for i in range(steps, 0, -1):
-            t = i / steps
-            r = max_r * t
-
-            # 生成圆形采样点
-            circle_points = sample_ellipse(cx, cy, r, r)
-
-            # 与目标多边形求交（简化：直接用圆形）
-            # TODO: 实现真正的多边形裁切
-
-            color = interpolate_gradient_stops(stops, t)
-            self._fill_polygon(circle_points, color)
+        """径向渐变填充 - 简化实现：用中心色填充"""
+        # 简化实现：取渐变中心色作为填充
+        # TODO: 实现完整的径向渐变裁切
+        color = interpolate_gradient_stops(stops, 0.0)
+        self._fill_polygon(polygon, color)
 
     def _clip_to_polygon(
         self,
@@ -562,10 +491,12 @@ class DrawingEngine:
         if not points:
             return
 
+        hex_color = rgb_to_hex(color)
         self.pen.up()
         self.pen.goto(points[0])
         self.pen.down()
-        self.pen.fillcolor(rgb_to_hex(color))
+        self.pen.fillcolor(hex_color)
+        self.pen.pencolor(hex_color)  # 画笔颜色与填充一致，避免黑边
         self.pen.begin_fill()
 
         for p in points[1:]:
