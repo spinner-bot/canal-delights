@@ -40,11 +40,11 @@ def create_gallery_data():
     items.append(['T', [x + 0.1, y + 0.02, 'L: Line'], {'font_size': 10, 'color': rgb(50, 50, 50)}])
 
     x, y = cell_pos(2, 0)
-    items.append(['R', [x + 0.04, y + 0.05, 0.14, 0.10], make_style(fill=rgb(100, 200, 100))])
+    items.append(['R', [x + 0.04, y + 0.05, 0.12, 0.10], make_style(fill=rgb(100, 200, 100))])
     items.append(['T', [x + 0.1, y + 0.02, 'R: Rect'], {'font_size': 10, 'color': rgb(50, 50, 50)}])
 
     x, y = cell_pos(3, 0)
-    items.append(['RR', [x + 0.04, y + 0.05, 0.14, 0.10, 0.02], make_style(fill=rgb(200, 150, 100))])
+    items.append(['RR', [x + 0.04, y + 0.05, 0.12, 0.10, 0.02], make_style(fill=rgb(200, 150, 100))])
     items.append(['T', [x + 0.1, y + 0.02, 'RR: Rounded'], {'font_size': 10, 'color': rgb(50, 50, 50)}])
 
     # 第 2 行
