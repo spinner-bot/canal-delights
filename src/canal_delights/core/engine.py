@@ -40,6 +40,9 @@ class DrawingEngine:
         self.screen.title("运河四季·美食绘卷")
         self.screen.tracer(0, 0)  # 关闭自动刷新，手动控制
 
+        # 设置坐标系：(0,0) 在左下角，(width,height) 在右上角
+        self.screen.setworldcoordinates(0, 0, width, height)
+
         # 初始化画笔
         self.pen = turtle.Turtle()
         self.pen.hideturtle()
