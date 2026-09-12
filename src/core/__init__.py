@@ -3,7 +3,6 @@
 """
 
 from .engine import DrawingEngine
-from .scene import Scene, SceneManager
-from .animation import Animation, Animator
+from .renderer import DrawingDataParser
 
-__all__ = ['DrawingEngine', 'Scene', 'SceneManager', 'Animation', 'Animator']
+__all__ = ['DrawingEngine', 'DrawingDataParser']
