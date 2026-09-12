@@ -6,6 +6,8 @@ from .state import AppState, StateMachine, Mode
 from .core.engine import DrawingEngine
 from .core.renderer import DrawingDataParser
 from .config import rgb, CANVAS_WIDTH, CANVAS_HEIGHT, CANVAS_BG
+from .content.catalog import get_city, get_food
+from .content.foods.prototype import get_food_drawing
 
 
 class App:
@@ -132,17 +134,17 @@ class App:
 
     def draw_city(self):
         """绘制城市场景"""
-        cities = ['北京', '天津', '扬州', '苏州', '杭州']
-        city = cities[self.state.current_city]
-        foods = ['美食1', '美食2']
+        city_data = get_city(self.state.current_city)
+        city = city_data['name']
 
         data = [
             # 城市标题
             ['T', [0.5, 0.85, f'{city}·食味'], {'font_size': 32, 'color': rgb(50, 50, 50)}],
         ]
 
-        # 两道美食占位
+        # 两道美食
         for i in range(2):
+            food_data = city_data['foods'][i]
             x = 0.3 + i * 0.4
             y = 0.5
 
@@ -151,7 +153,7 @@ class App:
             data.append(['C', [x, y, 0.1], {'fill': color}])
 
             # 美食名
-            data.append(['T', [x, y - 0.15, foods[i]], {'font_size': 14, 'color': rgb(50, 50, 50)}])
+            data.append(['T', [x, y - 0.15, food_data['name']], {'font_size': 14, 'color': rgb(50, 50, 50)}])
 
         # 提示
         data.append(['T', [0.5, 0.2, '←/→ 选择  Enter 查看  Esc 返回'],
@@ -161,21 +163,29 @@ class App:
 
     def draw_food_detail(self):
         """绘制美食详情"""
-        cities = ['北京', '天津', '扬州', '苏州', '杭州']
-        city = cities[self.state.current_city]
-        food = f"美食{self.state.current_food + 1}"
+        city_data = get_city(self.state.current_city)
+        food_data = get_food(self.state.current_city, self.state.current_food)
+        city_name = city_data['name']
 
         data = [
             # 标题
-            ['T', [0.5, 0.85, f'{city}·{food}'], {'font_size': 28, 'color': rgb(50, 50, 50)}],
-            # 占位图形
-            ['C', [0.5, 0.5, 0.15], {'fill': rgb(255, 200, 100)}],
-            # 描述
-            ['T', [0.5, 0.3, '这里是美食的文化介绍'], {'font_size': 14, 'color': rgb(100, 100, 100)}],
-            ['T', [0.5, 0.25, '和历史故事...'], {'font_size': 14, 'color': rgb(100, 100, 100)}],
+            ['T', [0.5, 0.85, f'{city_name}·{food_data["name"]}'], {'font_size': 28, 'color': rgb(50, 50, 50)}],
+            # 节气
+            ['T', [0.5, 0.78, food_data['season']], {'font_size': 14, 'color': rgb(150, 150, 150)}],
+        ]
+
+        # 添加食物绘图数据
+        food_drawing = get_food_drawing(city_data['id'], food_data['id'])
+        data.extend(food_drawing)
+
+        # 描述
+        data.extend([
+            ['T', [0.5, 0.25, food_data['story']], {'font_size': 14, 'color': rgb(100, 100, 100)}],
+            # 食材
+            ['T', [0.5, 0.2, f'食材：{"、".join(food_data["ingredients"])}'], {'font_size': 12, 'color': rgb(150, 150, 150)}],
             # 提示
             ['T', [0.5, 0.15, 'Enter 完成品鉴'], {'font_size': 12, 'color': rgb(150, 150, 150)}],
-        ]
+        ])
 
         self.parser.parse(data, self.bounds)
 
