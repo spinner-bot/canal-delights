@@ -284,8 +284,8 @@ class DrawingDataParser:
 
     def _render_rect(self, geo: list, style: dict, bounds: Bounds, transform: Optional[dict]):
         """渲染矩形: [x, y, w, h]"""
-        x = self._transform_size(geo[0], bounds)
-        y = self._transform_size(geo[1], bounds)
+        # x, y 是位置，需要用 normalized_to_absolute
+        x, y = self._transform_point((geo[0], geo[1]), bounds, transform)
         w = self._transform_size(geo[2], bounds)
         h = self._transform_size(geo[3], bounds)
 
@@ -318,8 +318,8 @@ class DrawingDataParser:
 
     def _render_rounded_rect(self, geo: list, style: dict, bounds: Bounds, transform: Optional[dict]):
         """渲染圆角矩形: [x, y, w, h, radius]"""
-        x = self._transform_size(geo[0], bounds)
-        y = self._transform_size(geo[1], bounds)
+        # x, y 是位置，需要用 normalized_to_absolute
+        x, y = self._transform_point((geo[0], geo[1]), bounds, transform)
         w = self._transform_size(geo[2], bounds)
         h = self._transform_size(geo[3], bounds)
         r = self._transform_size(geo[4], bounds)
