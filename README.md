@@ -91,6 +91,12 @@ python -m pip install -e .
 # 启动互动绘卷
 python -m canal_delights
 # 或：python run.py
+
+# 强制使用纯 Turtle 后端（教学核验/兼容模式）
+python -m canal_delights --renderer pure
+
+# 默认启用批量 Canvas 加速后端
+python -m canal_delights --renderer accelerated
 ```
 
 ## ⌨️ 操作指南
