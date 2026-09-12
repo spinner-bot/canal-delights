@@ -6,7 +6,7 @@ import math
 
 from .state import AppState, StateMachine, Mode
 from .core.backend import RenderMode, create_engine
-from .core.animation import AnimationClock
+from .core.animation import AnimationClock, SceneTransition
 from .core.navigation import BoatPhysics, CITY_POINTS, ROUTE_SEGMENTS, route_point, route_tangent
 from .core.particles import ParticleSystem
 from .core.renderer import DrawingDataParser
@@ -31,9 +31,14 @@ class App:
         )
         self.boat = BoatPhysics()
         self.particles = ParticleSystem(limit=72 if self.engine.mode_name == 'accelerated' else 18)
+        self.ambient_particles = ParticleSystem(
+            seed=2048, limit=48 if self.engine.mode_name == 'accelerated' else 12,
+        )
+        self.transition = SceneTransition()
         self.move_direction = 0
         self.animation_phase = 0.0
         self._splash_elapsed = 0.0
+        self._ambient_elapsed = 0.0
 
     def run(self):
         """运行应用"""
@@ -95,12 +100,20 @@ class App:
         elif self.state.mode == Mode.FINALE:
             self.draw_finale()
 
+        self.parser.parse(self.ambient_particles.drawing_data(), self.bounds)
+
+        if self.state.mode != Mode.INTRO:
+            self.draw_back_button()
+
         # 绘制帮助覆盖层
         if self.state.help_open:
             self.draw_help()
 
         # 绘制状态提示
         self.draw_status()
+
+        if self.transition.active:
+            self.draw_transition()
 
         self.engine.update()
 
@@ -297,26 +310,60 @@ class App:
         food_data = get_food(self.state.current_city, self.state.current_food)
         city_name = city_data['name']
 
+        theme = city_data['theme']
         data = [
-            # 标题
-            ['T', [0.5, 0.85, f'{city_name}·{food_data["name"]}'], {'font_size': 28, 'color': rgb(50, 50, 50)}],
-            # 节气
-            ['T', [0.5, 0.78, food_data['season']], {'font_size': 14, 'color': rgb(150, 150, 150)}],
+            # Upper area: illustration 3/10, introduction 7/10.
+            ['RR', [.065, .53, .27, .31, .025], {'fill': rgb(250, 246, 230), 'stroke': theme, 'stroke_width': 2}],
+            ['RR', [.365, .53, .57, .31, .025], {'fill': rgb(247, 240, 217), 'stroke': rgb(215, 192, 147), 'stroke_width': 1}],
+            ['T', [.405, .775, f'{city_name} · {food_data["name"]}'], {'font_size': 25, 'font_weight': 'bold', 'align': 'left', 'color': rgb(52, 44, 34)}],
+            ['T', [.405, .715, f'时令  {food_data["season"]}'], {'font_size': 12, 'align': 'left', 'color': theme}],
+            ['T', [.405, .650, food_data['story']], {'font_size': 15, 'align': 'left', 'color': rgb(91, 76, 56)}],
+            ['T', [.405, .590, f'风味食材  ·  {" / ".join(food_data["ingredients"])}'], {'font_size': 11, 'align': 'left', 'color': rgb(130, 116, 91)}],
+
+            # Lower area: story occupies roughly 60% of the content height.
+            ['RR', [.065, .135, .87, .35, .025], {'fill': rgb(242, 232, 203), 'stroke': rgb(204, 173, 116), 'stroke_width': 1}],
+            ['T', [.105, .420, '食味小记'], {'font_size': 19, 'font_weight': 'bold', 'align': 'left', 'color': theme}],
+            ['T', [.105, .355, f'{food_data["story"]}。一席风味沿京杭大运河流转，也记录着当地人的四时日常。'], {'font_size': 13, 'align': 'left', 'color': rgb(79, 68, 53)}],
+            ['T', [.105, .300, '从选料、火候到上桌，每一道工序都藏着城市的性情与水乡的记忆。'], {'font_size': 13, 'align': 'left', 'color': rgb(79, 68, 53)}],
+            ['RR', [.745, .175, .15, .065, .018], {'fill': theme if self.hovered_item == ('taste', 0) else rgb(222, 196, 142), 'stroke': theme, 'stroke_width': 1}],
+            ['T', [.82, .194, '完成品鉴'], {'font_size': 12, 'font_weight': 'bold', 'color': rgb(255, 249, 234) if self.hovered_item == ('taste', 0) else rgb(75, 55, 36)}],
         ]
 
         # 添加食物绘图数据
         food_drawing = get_food_drawing(city_data['id'], food_data['id'])
-        data.extend(food_drawing)
+        data.append(['GR', food_drawing, {
+            'transform': {'scale': [.60, .60], 'translate': [-.30, .255], 'pivot': [.5, .45]},
+        }])
 
-        # 描述
-        data.extend([
-            ['T', [0.5, 0.25, food_data['story']], {'font_size': 14, 'color': rgb(100, 100, 100)}],
-            # 食材
-            ['T', [0.5, 0.2, f'食材：{"、".join(food_data["ingredients"])}'], {'font_size': 12, 'color': rgb(150, 150, 150)}],
-            # 提示
-            ['T', [0.5, 0.15, 'Enter 完成品鉴'], {'font_size': 12, 'color': rgb(150, 150, 150)}],
-        ])
+        self.parser.parse(data, self.bounds)
 
+    def draw_back_button(self):
+        """Global back affordance shared by every non-intro scene."""
+        hovered = self.hovered_item == ('back', 0)
+        data = [
+            ['RR', [.055, .875, .105, .060, .018], {
+                'fill': rgb(139, 69, 19) if hovered else rgb(232, 218, 187),
+                'stroke': rgb(164, 121, 62), 'stroke_width': 1,
+            }],
+            ['T', [.108, .892, '‹ 返回'], {'font_size': 11, 'font_weight': 'bold',
+                                          'color': rgb(255, 248, 229) if hovered else rgb(91, 63, 39)}],
+        ]
+        self.parser.parse(data, self.bounds)
+
+    def draw_transition(self):
+        """A scroll-closing transition shared by all scene changes."""
+        cover = self.transition.cover
+        if cover <= 0:
+            return
+        half = .5 * cover
+        data = [
+            ['R', [0, 0, half, 1], {'fill': rgb(232, 218, 184), 'z': 900}],
+            ['R', [1 - half, 0, half, 1], {'fill': rgb(232, 218, 184), 'z': 900}],
+            ['L', [[half, .03], [half, .97]], {'stroke': rgb(169, 124, 65), 'stroke_width': 3, 'z': 910}],
+            ['L', [[1 - half, .03], [1 - half, .97]], {'stroke': rgb(169, 124, 65), 'stroke_width': 3, 'z': 910}],
+        ]
+        if cover > .84:
+            data.append(['T', [.5, .49, '京杭大运河'], {'font_size': 18, 'color': rgb(126, 82, 48), 'z': 920}])
         self.parser.parse(data, self.bounds)
 
     def draw_finale(self):
@@ -363,27 +410,47 @@ class App:
         self.parser.parse(data, self.bounds)
 
     # 事件处理
+    def begin_transition(self, action):
+        """Lock input and change scene at the covered midpoint."""
+        if self.transition.active:
+            return
+        self.move_direction = 0
+        self.state.transition_locked = True
+
+        def switch_scene():
+            # StateMachine intentionally rejects transitions while locked, so
+            # unlock only for the atomic midpoint scene change.
+            self.state.transition_locked = False
+            action()
+            self.state.transition_locked = True
+            self.hovered_item = None
+            self.ambient_particles.clear()
+
+        self.transition.start(switch_scene)
+
     def on_enter(self):
         """Enter 键"""
+        if self.state.transition_locked:
+            return
         if self.state.help_open:
             self.machine.toggle_help()
             self.render()
             return
 
         if self.state.mode == Mode.INTRO:
-            self.machine.start_journey()
+            self.begin_transition(self.machine.start_journey)
         elif self.state.mode == Mode.MAP:
             if self.state.is_all_stamped():
-                self.machine.go_to_finale()
+                self.begin_transition(self.machine.go_to_finale)
             elif self.boat.nearby_city() is not None:
                 self.state.current_city = self.boat.nearby_city()
-                self.machine.enter_city()
+                self.begin_transition(self.machine.enter_city)
         elif self.state.mode == Mode.CITY:
-            self.machine.open_food()
+            self.begin_transition(self.machine.open_food)
         elif self.state.mode == Mode.FOOD_DETAIL:
-            self.machine.complete_tasting()
+            self.begin_transition(self.machine.complete_tasting)
         elif self.state.mode == Mode.FINALE:
-            self.machine.return_from_finale()
+            self.begin_transition(self.machine.return_from_finale)
 
         self.render()
 
@@ -391,13 +458,15 @@ class App:
         """Esc 键"""
         if self.state.help_open:
             self.machine.toggle_help()
-        else:
-            self.machine.back()
+        elif self.state.mode == Mode.FINALE:
+            self.begin_transition(self.machine.return_from_finale)
+        elif self.state.mode != Mode.INTRO:
+            self.begin_transition(self.machine.back)
         self.render()
 
     def on_left(self):
         """左方向键"""
-        if self.state.help_open:
+        if self.state.help_open or self.state.transition_locked:
             return
 
         if self.state.mode == Mode.MAP:
@@ -408,7 +477,7 @@ class App:
 
     def on_right(self):
         """右方向键"""
-        if self.state.help_open:
+        if self.state.help_open or self.state.transition_locked:
             return
 
         if self.state.mode == Mode.MAP:
@@ -423,6 +492,18 @@ class App:
     def on_animation_frame(self, delta_seconds):
         """Drive ambient motion, boat physics and particles from one clock."""
         self.animation_phase += delta_seconds
+        was_transitioning = self.transition.active
+        self.transition.step(delta_seconds)
+        if was_transitioning and not self.transition.active:
+            self.state.transition_locked = False
+
+        self.ambient_particles.step(delta_seconds)
+        self._ambient_elapsed += delta_seconds
+        interval = .16 if self.engine.mode_name == 'accelerated' else .34
+        if self._ambient_elapsed >= interval:
+            self.emit_ambient_particle()
+            self._ambient_elapsed = 0.0
+
         if self.state.mode == Mode.MAP:
             moved = self.boat.step(self.move_direction, delta_seconds)
             self.particles.step(delta_seconds)
@@ -440,8 +521,42 @@ class App:
         self.render()
         return True
 
+    def emit_ambient_particle(self):
+        """Emit restrained, scene-specific atmosphere rather than confetti."""
+        randomizer = self.ambient_particles.random
+        if self.state.mode == Mode.INTRO:
+            self.ambient_particles.emit_drift(
+                randomizer.uniform(.12, .88), randomizer.uniform(.24, .34), rgb(173, 207, 205),
+                vy=(.010, .025), life=(1.5, 2.8), size=(.002, .005),
+            )
+        elif self.state.mode == Mode.MAP:
+            leaf = rgb(155, 142, 67) if randomizer.random() < .5 else rgb(99, 142, 91)
+            self.ambient_particles.emit_drift(
+                randomizer.uniform(.12, .90), randomizer.uniform(.55, .86), leaf,
+                vx=(-.025, -.010), vy=(-.030, -.012), life=(1.8, 3.2), size=(.003, .007),
+            )
+        elif self.state.mode == Mode.CITY:
+            theme = get_city(self.state.current_city)['theme']
+            soft_theme = tuple(int((channel + 245) / 2) for channel in theme)
+            self.ambient_particles.emit_drift(
+                randomizer.uniform(.12, .88), randomizer.uniform(.24, .38), soft_theme,
+                vy=(.018, .040), life=(1.3, 2.4), size=(.002, .005),
+            )
+        elif self.state.mode == Mode.FOOD_DETAIL:
+            self.ambient_particles.emit_drift(
+                .20, .73, rgb(205, 207, 200), count=2,
+                vx=(-.010, .010), vy=(.030, .060), life=(1.0, 1.8), size=(.003, .007),
+            )
+        elif self.state.mode == Mode.FINALE:
+            self.ambient_particles.emit_drift(
+                randomizer.uniform(.10, .90), .88, rgb(201, 75, 67),
+                vx=(-.025, .015), vy=(-.055, -.028), life=(2.2, 3.8), size=(.004, .008),
+            )
+
     def on_help(self):
         """H 键"""
+        if self.state.transition_locked:
+            return
         self.machine.toggle_help()
         self.render()
 
@@ -450,7 +565,11 @@ class App:
         nx, ny = x / CANVAS_WIDTH, y / CANVAS_HEIGHT
         hovered = None
 
-        if not self.state.help_open and self.state.mode == Mode.INTRO:
+        if self.state.transition_locked:
+            return
+        if not self.state.help_open and self.state.mode != Mode.INTRO and .045 <= nx <= .17 and .86 <= ny <= .95:
+            hovered = ('back', 0)
+        elif not self.state.help_open and self.state.mode == Mode.INTRO:
             if .35 <= nx <= .65 and .14 <= ny <= .26:
                 hovered = ('start', 0)
         elif not self.state.help_open and self.state.mode == Mode.MAP:
@@ -465,6 +584,9 @@ class App:
                 hovered = ('food', 0)
             elif .56 <= nx <= .84 and .36 <= ny <= .64:
                 hovered = ('food', 1)
+        elif not self.state.help_open and self.state.mode == Mode.FOOD_DETAIL:
+            if .73 <= nx <= .91 and .16 <= ny <= .25:
+                hovered = ('taste', 0)
 
         self.engine.set_cursor('hand2' if hovered is not None else '')
         if hovered != self.hovered_item:
@@ -473,33 +595,41 @@ class App:
 
     def on_click(self, x, y):
         """鼠标点击"""
+        if self.state.transition_locked:
+            return
         if self.state.help_open:
             self.machine.toggle_help()
             self.render()
             return
 
-        if self.state.mode == Mode.INTRO:
-            self.machine.start_journey()
+        nx, ny = x / CANVAS_WIDTH, y / CANVAS_HEIGHT
+        if self.state.mode != Mode.INTRO and .045 <= nx <= .17 and .86 <= ny <= .95:
+            if self.state.mode == Mode.FINALE:
+                self.begin_transition(self.machine.return_from_finale)
+            else:
+                self.begin_transition(self.machine.back)
+        elif self.state.mode == Mode.INTRO:
+            if .35 <= nx <= .65 and .14 <= ny <= .26:
+                self.begin_transition(self.machine.start_journey)
         elif self.state.mode == Mode.MAP:
-            nx, ny = x / CANVAS_WIDTH, y / CANVAS_HEIGHT
             if .045 <= nx <= .14 and .37 <= ny <= .51:
                 self.boat.nudge(-1)
             elif .86 <= nx <= .955 and .37 <= ny <= .51:
                 self.boat.nudge(1)
             elif self.boat.nearby_city() is not None and .79 <= nx <= .91 and .70 <= ny <= .78:
                 self.state.current_city = self.boat.nearby_city()
-                self.machine.enter_city()
+                self.begin_transition(self.machine.enter_city)
         elif self.state.mode == Mode.CITY:
             # The two dishes are deliberately generous click targets.
-            nx = x / CANVAS_WIDTH
-            if .16 <= nx <= .44:
+            if .16 <= nx <= .44 and .36 <= ny <= .64:
                 self.state.current_food = 0
-                self.machine.open_food()
-            elif .56 <= nx <= .84:
+                self.begin_transition(self.machine.open_food)
+            elif .56 <= nx <= .84 and .36 <= ny <= .64:
                 self.state.current_food = 1
-                self.machine.open_food()
+                self.begin_transition(self.machine.open_food)
         elif self.state.mode == Mode.FOOD_DETAIL:
-            self.machine.complete_tasting()
+            if .73 <= nx <= .91 and .16 <= ny <= .25:
+                self.begin_transition(self.machine.complete_tasting)
         self.render()
 
 

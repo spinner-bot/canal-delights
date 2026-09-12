@@ -136,6 +136,25 @@ def transform_points(
     return [apply_transform(p, transform, bounds) for p in points]
 
 
+def transform_scale(transform: Optional[dict]) -> Point:
+    """Return the accumulated x/y scale of a transform or transform chain."""
+    if not transform:
+        return 1.0, 1.0
+    if '_chain' in transform:
+        sx, sy = 1.0, 1.0
+        for step in transform['_chain']:
+            step_x, step_y = transform_scale(step)
+            sx *= step_x
+            sy *= step_y
+        return sx, sy
+    scale = transform.get('scale')
+    if not scale:
+        return 1.0, 1.0
+    if len(scale) == 1:
+        return float(scale[0]), float(scale[0])
+    return float(scale[0]), float(scale[1])
+
+
 def compose_transforms(parent: dict, child: dict) -> dict:
     """
     组合父子变换

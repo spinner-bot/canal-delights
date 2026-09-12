@@ -19,6 +19,7 @@ from .geometry import (
     normalized_points_to_absolute,
     apply_transform,
     transform_points,
+    transform_scale,
 )
 from .styles import validate_rgb, parse_style, interpolate_gradient_stops
 from ..config import VALID_TYPE_CODES, CANVAS_BG
@@ -259,6 +260,11 @@ class DrawingDataParser:
         """转换尺寸"""
         return normalized_size_to_absolute(size, bounds)
 
+    def _scaled_size(self, size: float, bounds: Bounds, transform: Optional[dict], axis=None) -> float:
+        sx, sy = transform_scale(transform)
+        factor = abs(sx) if axis == 'x' else abs(sy) if axis == 'y' else min(abs(sx), abs(sy))
+        return self._transform_size(size, bounds) * factor
+
     # ============================================
     # 各类型渲染
     # ============================================
@@ -266,7 +272,7 @@ class DrawingDataParser:
     def _render_point(self, geo: list, style: dict, bounds: Bounds, transform: Optional[dict]):
         """渲染点: [x, y, size]"""
         x, y = self._transform_point((geo[0], geo[1]), bounds, transform)
-        size = self._transform_size(geo[2], bounds)
+        size = self._scaled_size(geo[2], bounds, transform)
 
         fill, stroke, _, _ = self._get_fill_and_stroke(style)
         color = fill or stroke or (0, 0, 0)
@@ -321,7 +327,7 @@ class DrawingDataParser:
         # corner radius remains based on the short edge.
         w = geo[2] * bounds[2]
         h = geo[3] * bounds[3]
-        r = self._transform_size(geo[4], bounds)
+        r = self._scaled_size(geo[4], bounds, transform)
 
         abs_x = bounds[0] + x
         abs_y = bounds[1] + y
@@ -333,7 +339,7 @@ class DrawingDataParser:
     def _render_circle(self, geo: list, style: dict, bounds: Bounds, transform: Optional[dict]):
         """渲染圆形: [cx, cy, r]"""
         cx, cy = self._transform_point((geo[0], geo[1]), bounds, transform)
-        r = self._transform_size(geo[2], bounds)
+        r = self._scaled_size(geo[2], bounds, transform)
 
         fill, stroke, stroke_width, gradient = self._get_fill_and_stroke(style)
 
@@ -350,8 +356,8 @@ class DrawingDataParser:
     def _render_ellipse(self, geo: list, style: dict, bounds: Bounds, transform: Optional[dict]):
         """渲染椭圆: [cx, cy, rx, ry]"""
         cx, cy = self._transform_point((geo[0], geo[1]), bounds, transform)
-        rx = self._transform_size(geo[2], bounds)
-        ry = self._transform_size(geo[3], bounds)
+        rx = self._scaled_size(geo[2], bounds, transform, 'x')
+        ry = self._scaled_size(geo[3], bounds, transform, 'y')
 
         fill, stroke, stroke_width, gradient = self._get_fill_and_stroke(style)
 
@@ -383,7 +389,7 @@ class DrawingDataParser:
     def _render_arc(self, geo: list, style: dict, bounds: Bounds, transform: Optional[dict]):
         """渲染弧形: [cx, cy, r, start, end]"""
         cx, cy = self._transform_point((geo[0], geo[1]), bounds, transform)
-        r = self._transform_size(geo[2], bounds)
+        r = self._scaled_size(geo[2], bounds, transform)
         start = geo[3]
         end = geo[4]
 
@@ -450,8 +456,8 @@ class DrawingDataParser:
     def _render_ring(self, geo: list, style: dict, bounds: Bounds, transform: Optional[dict]):
         """渲染圆环: [cx, cy, r_inner, r_outer]"""
         cx, cy = self._transform_point((geo[0], geo[1]), bounds, transform)
-        r_inner = self._transform_size(geo[2], bounds)
-        r_outer = self._transform_size(geo[3], bounds)
+        r_inner = self._scaled_size(geo[2], bounds, transform)
+        r_outer = self._scaled_size(geo[3], bounds, transform)
 
         fill, stroke, stroke_width, _ = self._get_fill_and_stroke(style)
         self.engine.draw_ring(cx, cy, r_inner, r_outer, fill, stroke, stroke_width)
