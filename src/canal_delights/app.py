@@ -147,20 +147,25 @@ class App:
 
         # 标题
         data = [
-            # North to south: Beijing starts at the upper-left, then the canal
-            # descends towards Hangzhou at the lower-right.
-            ['B', [[.10,.78],[.23,.66],[.39,.48],[.55,.39]], {'stroke': rgb(117, 172, 184), 'stroke_width': 36}],
-            ['B', [[.55,.39],[.69,.31],[.80,.25],[.91,.16]], {'stroke': rgb(117, 172, 184), 'stroke_width': 36}],
-            ['B', [[.10,.78],[.23,.66],[.39,.48],[.55,.39]], {'stroke': rgb(208, 233, 229), 'stroke_width': 3}],
-            ['B', [[.55,.39],[.69,.31],[.80,.25],[.91,.16]], {'stroke': rgb(208, 233, 229), 'stroke_width': 3}],
+            # A simplified geographic route: Beijing → Tianjin turns gently
+            # east, the canal then runs south to Yangzhou, before bending
+            # southeast to Suzhou and southwest to Hangzhou.
+            ['B', [[.17,.78],[.25,.83],[.23,.65],[.30,.69]], {'stroke': rgb(117, 172, 184), 'stroke_width': 36}],
+            ['B', [[.30,.69],[.37,.62],[.43,.49],[.55,.43]], {'stroke': rgb(117, 172, 184), 'stroke_width': 36}],
+            ['B', [[.55,.43],[.64,.38],[.70,.27],[.80,.28]], {'stroke': rgb(117, 172, 184), 'stroke_width': 36}],
+            ['B', [[.80,.28],[.79,.21],[.76,.18],[.74,.14]], {'stroke': rgb(117, 172, 184), 'stroke_width': 36}],
+            ['B', [[.17,.78],[.25,.83],[.23,.65],[.30,.69]], {'stroke': rgb(208, 233, 229), 'stroke_width': 3}],
+            ['B', [[.30,.69],[.37,.62],[.43,.49],[.55,.43]], {'stroke': rgb(208, 233, 229), 'stroke_width': 3}],
+            ['B', [[.55,.43],[.64,.38],[.70,.27],[.80,.28]], {'stroke': rgb(208, 233, 229), 'stroke_width': 3}],
+            ['B', [[.80,.28],[.79,.21],[.76,.18],[.74,.14]], {'stroke': rgb(208, 233, 229), 'stroke_width': 3}],
             ['T', [0.5, 0.9, '运河地图'], {'font_size': 28, 'color': rgb(50, 50, 50)}],
             ['T', [0.5, 0.84, '循水而行，寻访五城时味'], {'font_size': 13, 'color': rgb(122, 101, 75)}],
         ]
 
         # 城市节点
         for i, (city, color) in enumerate(zip(cities, colors)):
-            x = 0.15 + i * 0.175
-            y = (0.78, 0.66, 0.48, 0.31, 0.16)[i]
+            x = (.17, .30, .55, .80, .74)[i]
+            y = (.78, .69, .43, .28, .14)[i]
 
             # 城市圆圈
             fill_color = color if i == self.state.current_city else rgb(200, 200, 200)
@@ -355,7 +360,7 @@ class App:
         elif self.state.mode == Mode.MAP:
             # City seals sit at fixed scene positions.  A click selects the
             # nearest seal; clicking the selected one opens that city.
-            positions = [(0.15, .78), (.325, .66), (.50, .48), (.675, .31), (.85, .16)]
+            positions = [(.17, .78), (.30, .69), (.55, .43), (.80, .28), (.74, .14)]
             nx, ny = x / CANVAS_WIDTH, y / CANVAS_HEIGHT
             nearest = min(range(len(positions)), key=lambda i: (positions[i][0] - nx) ** 2 + (positions[i][1] - ny) ** 2)
             px, py = positions[nearest]
