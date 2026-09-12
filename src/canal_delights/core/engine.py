@@ -292,7 +292,7 @@ class DrawingEngine:
 
     def draw_path(
         self,
-        commands: List[list,
+        commands: List[list],
         fill: Optional[RGB] = None,
         stroke: Optional[RGB] = None,
         stroke_width: float = 1.0,
