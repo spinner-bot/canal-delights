@@ -2,7 +2,7 @@
 from __future__ import annotations
 from array import array
 from dataclasses import dataclass
-import io, math, random, sys, threading, wave
+import io, math, random, sys, threading, time, wave
 
 SAMPLE_RATE, DEFAULT_BPM, FULL_SCALE = 11025, 120, 32767
 
@@ -16,6 +16,13 @@ class Voice:
 class NoteEvent:
     voice: str; note: str; start_beats: float; duration_beats: float
     velocity: str = 'mf'; articulation: str = 'legato'
+
+@dataclass(frozen=True)
+class ScorePosition:
+    bar: int
+    beat: float
+    seconds: float
+    cycle: int = 0
 
 # Five independent instruments: each owns timbre, gain and stereo position.
 VOICES = {
@@ -159,30 +166,63 @@ def synthesize_score(score=None,bpm=DEFAULT_BPM,volume=.7,sample_rate=SAMPLE_RAT
     # Existing callers get the canonical performance rather than asset playback.
     return render_canal_suite(bpm,volume,sample_rate)
 
-def _wav_chunks(payload,seconds=1.):
-    with wave.open(io.BytesIO(payload),'rb') as source: params=source.getparams(); frames=source.readframes(source.getnframes())
-    size=round(params.framerate*seconds)*params.nchannels*params.sampwidth
-    for start in range(0,len(frames),size):
-        stream=io.BytesIO()
-        with wave.open(stream,'wb') as target: target.setparams(params); target.writeframes(frames[start:start+size])
-        yield stream.getvalue()
+def score_position(elapsed, bpm=DEFAULT_BPM, beats_per_bar=4):
+    """Map monotonic elapsed time to an absolute bar/beat position."""
+    elapsed=max(0.,float(elapsed)); beat_seconds=60./bpm
+    total_beats=elapsed/beat_seconds
+    return ScorePosition(int(total_beats//beats_per_bar), total_beats%beats_per_bar, elapsed)
+
+def looped_score_position(elapsed,duration,bpm=DEFAULT_BPM,beats_per_bar=4):
+    """Locate a repeating finite score without accumulating playback delay."""
+    if duration<=0:raise ValueError('duration must be positive')
+    cycle=int(max(0.,elapsed)//duration)
+    position=score_position(max(0.,elapsed)%duration,bpm,beats_per_bar)
+    return ScorePosition(position.bar,position.beat,position.seconds,cycle)
+
+def _wav_timeline(payload):
+    with wave.open(io.BytesIO(payload),'rb') as source:
+        return source.getparams(),source.readframes(source.getnframes())
+
+def _wav_window(params,frames,offset_seconds,seconds=.5):
+    frame_size=params.nchannels*params.sampwidth
+    start=round(offset_seconds*params.framerate)*frame_size
+    size=round(seconds*params.framerate)*frame_size
+    stream=io.BytesIO()
+    with wave.open(stream,'wb') as target:
+        target.setparams(params); target.writeframes(frames[start:start+size])
+    return stream.getvalue()
 
 class ScorePlayer:
-    """Perform one complete code-scored suite in short Windows-safe phrases."""
+    """Perform from a monotonic-clock bar position, skipping time lost to lag."""
     def __init__(self,volume=.7,sound_module=None):
         if sound_module is None:
             try: import winsound as sound_module
             except ImportError: sound_module=None
-        self.sound=sound_module; self.volume=max(0.,min(1.,volume)); self.enabled=True; self.playing=False; self._buffer=None; self._suite_cache=None; self._thread=None; self._stop_event=threading.Event()
+        self.sound=sound_module; self.volume=max(0.,min(1.,volume)); self.enabled=True; self.playing=False; self.current_position=ScorePosition(0,0.,0.); self._buffer=None; self._suite_cache=None; self._thread=None; self._stop_event=threading.Event()
     @property
     def available(self): return self.sound is not None
     def _perform_suite(self):
         try:
             payload = self._suite_cache or render_canal_suite(volume=self.volume)
             self._suite_cache = payload
-            for chunk in _wav_chunks(payload):
-                if self._stop_event.is_set(): return
-                self._buffer=chunk; self.sound.PlaySound(chunk,self.sound.SND_MEMORY)
+            params,frames=_wav_timeline(payload)
+            duration=len(frames)/(params.framerate*params.nchannels*params.sampwidth)
+            origin=time.monotonic()
+            # At 120 BPM this is an eighth note. It divides the full 65.25 s
+            # render exactly and keeps normal window boundaries continuous.
+            window_seconds=.25
+            while not self._stop_event.is_set():
+                elapsed=time.monotonic()-origin
+                quantized_elapsed=math.floor(elapsed/window_seconds)*window_seconds
+                # Recompute from the system clock every window. A delayed call
+                # therefore jumps forward instead of stretching later bars.
+                self.current_position=looped_score_position(quantized_elapsed,duration)
+                timeline_seconds=self.current_position.seconds
+                self._buffer=_wav_window(params,frames,timeline_seconds,window_seconds)
+                call_started=time.monotonic()
+                self.sound.PlaySound(self._buffer,self.sound.SND_MEMORY)
+                remaining=window_seconds-(time.monotonic()-call_started)
+                if remaining>0:self._stop_event.wait(remaining)
         except RuntimeError: pass
         finally: self.playing=False
     def start(self):
