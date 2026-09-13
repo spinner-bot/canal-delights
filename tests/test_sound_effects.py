@@ -1,7 +1,7 @@
 import struct
 import wave
 from io import BytesIO
-from canal_delights.core.sound_effects import EFFECT_DURATIONS, EffectPlayer, synthesize_effect
+from canal_delights.core.sound_effects import EFFECT_DURATIONS, SYNTHESIS_METHODS, EffectPlayer, synthesize_effect
 
 
 def test_all_effects_are_embedded_short_wavs():
@@ -10,6 +10,7 @@ def test_all_effects_are_embedded_short_wavs():
         with wave.open(BytesIO(synthesize_effect(name)), 'rb') as wav:
             assert wav.getnchannels() == 2
             assert abs(wav.getnframes() / wav.getframerate() - seconds) < .002
+    assert 'karplus-strong' in SYNTHESIS_METHODS
 
 
 def test_effect_pcm_has_headroom_smooth_edges_and_unique_designs():

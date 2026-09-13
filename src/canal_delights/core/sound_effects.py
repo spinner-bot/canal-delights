@@ -10,6 +10,7 @@ EFFECT_DURATIONS = {
     'key': .28, 'scroll': 1.0, 'page': .6,
     'water': .8, 'stamp': .4, 'fresh': .6,
 }
+SYNTHESIS_METHODS = ('karplus-strong', 'filtered-noise', 'cyclic-texture')
 
 
 def _noise(count, seed):
@@ -38,18 +39,28 @@ def _filtered_noise(count, sample_rate, seed, fast_hz, slow_hz=0):
     return result
 
 
-def _add_tone(left, right, sample_rate, onset, duration, frequency, amplitude,
-              pan=.5, decay=4., sweep=0., harmonics=(1., .18, .06)):
+def _add_karplus(left, right, sample_rate, onset, duration, frequency, amplitude,
+                 pan=.5, damping=.992, seed=0xA11CE):
+    """Noise-excited Karplus–Strong body: a struck object, not a sine tone."""
     start, count = round(onset * sample_rate), round(duration * sample_rate)
     lg, rg = math.sqrt(1-pan), math.sqrt(pan)
-    phase = 0.
+    delay = max(2, round(sample_rate / frequency))
+    ring = _noise(delay, seed)
+    position = 0
     for index in range(min(count, len(left)-start)):
         t = index / sample_rate
-        env = min(1., t/.008) * min(1., (duration-t)/.045) * math.exp(-decay*t)
-        phase += math.tau * (frequency + sweep*t/max(duration, .001)) / sample_rate
-        tone = sum(gain * math.sin(phase * partial) for partial, gain in enumerate(harmonics, 1))
-        value = tone * env * amplitude
+        value = ring[position]
+        following = ring[(position+1) % delay]
+        ring[position] = (value+following)*.5*damping
+        position = (position+1) % delay
+        env = min(1.,t/.004)*min(1.,(duration-t)/.025)
+        value *= env*amplitude
         left[start+index] += value*lg; right[start+index] += value*rg
+
+
+def _cyclic_texture(size, seed):
+    """A seamless random control ring used for non-oscillator water texture."""
+    return _noise(size, seed)
 
 
 def _paper_layer(left, right, sample_rate, seed, start, duration, amplitude, direction=1):
@@ -59,7 +70,10 @@ def _paper_layer(left, right, sample_rate, seed, start, duration, amplitude, dir
     for index in range(min(count, len(left)-onset)):
         progress = index / max(1, count-1)
         # Two irregular cloth/paper swells avoid a generic white-noise "whoosh".
-        shape = math.sin(math.pi*progress)**1.5 * (.72 + .28*math.sin(math.tau*3.1*progress)**2)
+        arch = 4*progress*(1-progress)
+        flutter = (progress*3.1) % 1
+        flutter = 4*flutter*(1-flutter)
+        shape = arch**1.5 * (.72 + .28*flutter*flutter)
         pan = .18+.64*progress if direction > 0 else .82-.64*progress
         value = texture[index] * shape * amplitude
         left[onset+index] += value*math.sqrt(1-pan)
@@ -69,38 +83,44 @@ def _paper_layer(left, right, sample_rate, seed, start, duration, amplitude, dir
 def _design_effect(kind, left, right, sample_rate, strength):
     duration = EFFECT_DURATIONS[kind]
     if kind == 'key':
-        # Muted bamboo/wood tap: short fundamental, quieter upper resonance.
-        _add_tone(left,right,sample_rate,0,.24,740,.25*strength,.46,13.,-38.,(1.,.15,.035))
-        _add_tone(left,right,sample_rate,.018,.18,1110,.075*strength,.54,18.,-60.,(1.,.08))
+        # Two noise-excited wooden bodies create an unmistakable percussion hit.
+        _add_karplus(left,right,sample_rate,0,.24,310,.27*strength,.45,.985,0xB4A0)
+        _add_karplus(left,right,sample_rate,.012,.16,520,.085*strength,.56,.978,0xB4A1)
     elif kind == 'scroll':
         _paper_layer(left,right,sample_rate,0x5107,0,duration,.34*strength,1)
         _paper_layer(left,right,sample_rate,0x8A31,.13,.70,.15*strength,-1)
-        _add_tone(left,right,sample_rate,.04,.35,185,.075*strength,.38,7.,-22.,(1.,.2))
+        _add_karplus(left,right,sample_rate,.04,.35,185,.075*strength,.38,.994,0x5108)
     elif kind == 'page':
         _paper_layer(left,right,sample_rate,0xFACE,0,.52,.38*strength,1)
         _paper_layer(left,right,sample_rate,0xB00C,.20,.34,.16*strength,-1)
-        _add_tone(left,right,sample_rate,.38,.18,410,.055*strength,.72,14.,-90.,(1.,.1))
+        _add_karplus(left,right,sample_rate,.38,.18,410,.055*strength,.72,.982,0xFACF)
     elif kind == 'water':
-        # Integral-cycle components join cleanly when this sustained chunk repeats.
+        # Seamless interpolated random rings: flowing texture without oscillators.
+        broad, detail = _cyclic_texture(37,0xA0A0), _cyclic_texture(83,0xA0A1)
+        def sample_ring(ring, progress):
+            position=progress*len(ring); base=int(position)%len(ring); mix=position-int(position)
+            mix=mix*mix*(3-2*mix)
+            return ring[base]*(1-mix)+ring[(base+1)%len(ring)]*mix
         for index in range(len(left)):
             p = index / len(left)
-            ripple = sum(g*math.sin(math.tau*cycles*p) for cycles,g in ((29,.42),(47,.27),(73,.14),(101,.07)))
-            breathe = .82+.18*math.sin(math.tau*2*p)
+            ripple=.72*sample_ring(broad,p)+.28*sample_ring(detail,p)
+            breathe=.84+.16*(1-abs(2*((p*2)%1)-1))
             left[index] += ripple*breathe*.105*strength
-            right[index] += (ripple*.84+math.sin(math.tau*37*p)*.16)*breathe*.105*strength
+            right[index] += (ripple*.84+sample_ring(detail,p)*.16)*breathe*.105*strength
         for onset, pan in ((.17,.24),(.49,.72)):
-            _add_tone(left,right,sample_rate,onset,.18,210,.035*strength,pan,12.,340.,(1.,.12))
+            _add_karplus(left,right,sample_rate,onset,.18,260,.035*strength,pan,.987,0xA0B0+int(onset*100))
     elif kind == 'stamp':
         # Felted impact + wooden body + brief paper contact.
-        _add_tone(left,right,sample_rate,0,.32,92,.30*strength,.5,10.,-18.,(1.,.22,.06))
-        _add_tone(left,right,sample_rate,.008,.18,286,.13*strength,.47,18.,-70.,(1.,.16))
+        _add_karplus(left,right,sample_rate,0,.32,96,.30*strength,.5,.996,0x57A0)
+        _add_karplus(left,right,sample_rate,.008,.18,286,.13*strength,.47,.986,0x57A1)
         _paper_layer(left,right,sample_rate,0x57A9,0,.12,.10*strength,-1)
     else:  # fresh: airy D-major pentatonic chime, not a digital three-beep scale.
         for onset, frequency, pan in ((0,587.33,.30),(.12,739.99,.50),(.25,880.,.70)):
-            _add_tone(left,right,sample_rate,onset,.34,frequency,.13*strength,pan,5.5,8.,(1.,.22,.08,.025))
+            _add_karplus(left,right,sample_rate,onset,.34,frequency,.13*strength,pan,.994,0xC100+int(onset*100))
         air = _filtered_noise(len(left), sample_rate, 0xC1EA, 900, 120)
         for index, value in enumerate(air):
-            env = math.sin(math.pi*index/len(left))**2
+            progress = index/len(left)
+            env = (4*progress*(1-progress))**2
             left[index] += value*env*.018*strength; right[index] += value*env*.021*strength
 
 
