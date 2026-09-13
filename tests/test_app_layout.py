@@ -80,3 +80,19 @@ def test_completed_first_load_is_never_entered_again():
 
     app._enter_journey()
     assert app.state.mode is Mode.MAP
+
+
+def test_first_map_entry_opens_guide_once_and_settings_can_reopen_it():
+    app = object.__new__(App)
+    app.state = AppState(mode=Mode.LOADING)
+    app.machine = StateMachine(app.state)
+    app._guide_shown = False
+    app._finish_first_loading()
+    assert app.state.mode is Mode.MAP and app.state.help_open
+    app.state.help_open = False
+    app._finish_first_loading()
+    assert not app.state.help_open
+
+    app.state.mode = Mode.SETTINGS
+    app._open_guide_from_settings()
+    assert app.state.mode is Mode.MAP and app.state.help_open

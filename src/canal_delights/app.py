@@ -55,6 +55,7 @@ class App:
         self._loading_complete = False
         self._loading_finished_transition = False
         self._loading_label = '正在加载……'
+        self._guide_shown = False
 
     def run(self):
         """运行应用"""
@@ -289,6 +290,16 @@ class App:
             return
         self._loading_started = True
         threading.Thread(target=self._prepare_first_journey, name='canal-loader', daemon=True).start()
+
+    def _finish_first_loading(self):
+        self.machine.finish_loading()
+        if not self._guide_shown:
+            self.state.help_open = True
+            self._guide_shown = True
+
+    def _open_guide_from_settings(self):
+        self.machine.back()
+        self.state.help_open = True
 
     def _enter_journey(self):
         """Route later visits directly to the map after the one-time preload."""
@@ -738,6 +749,11 @@ class App:
             status += '（命令行兼容模式）'
         data.extend([
             ['T', [.50, .272 + pulse, status], {'font_size': 10, 'color': rgb(119, 97, 70)}],
+            ['RR', [.39, .212, .22, .040, .018], {
+                'fill': rgb(139, 69, 19) if self.hovered_item == ('guide', 0) else rgb(232, 218, 187),
+                'stroke': rgb(203, 157, 74), 'stroke_width': 2,
+            }],
+            ['T', [.50, .226, '使用引导'], {'font_size': 10, 'font_weight': 'bold', 'color': rgb(255, 248, 229) if self.hovered_item == ('guide', 0) else rgb(91, 63, 39)}],
         ])
         self.parser.parse(data, self.bounds)
 
@@ -785,18 +801,26 @@ class App:
         self.parser.parse(data, self.bounds)
 
     def draw_help(self):
-        """绘制帮助覆盖层"""
+        """绘制首次旅程引导浮窗。"""
+        pulse = .004 * math.sin(self.animation_phase * 1.7)
         data = [
-            # 半透明背景（用灰色模拟）
-            ['R', [0.2, 0.2, 0.6, 0.6], {'fill': rgb(240, 240, 240)}],
-            # 帮助内容
-            ['T', [0.5, 0.72, '操作帮助'], {'font_size': 24, 'color': rgb(50, 50, 50)}],
-            ['T', [0.5, 0.62, 'Enter - 确认/进入'], {'font_size': 14, 'color': rgb(80, 80, 80)}],
-            ['T', [0.5, 0.56, '←/→ - 选择'], {'font_size': 14, 'color': rgb(80, 80, 80)}],
-            ['T', [0.5, 0.5, 'Esc - 返回上一级'], {'font_size': 14, 'color': rgb(80, 80, 80)}],
-            ['T', [0.5, 0.44, '鼠标长按 / ←→ - 驾船或翻页'], {'font_size': 14, 'color': rgb(80, 80, 80)}],
-            ['T', [0.5, 0.38, 'B - 打开/关闭美食图鉴'], {'font_size': 14, 'color': rgb(80, 80, 80)}],
-            ['T', [0.5, 0.30, '按 H 或 Esc 关闭'], {'font_size': 12, 'color': rgb(150, 150, 150)}],
+            ['R', [0, 0, 1, 1], {'fill': rgb(218, 211, 191), 'z': 700}],
+            ['RR', [.155, .135 + pulse, .69, .73, .040], {'fill': rgb(106, 75, 48), 'z': 701}],
+            ['RR', [.165, .145 + pulse, .67, .71, .036], {'fill': rgb(250, 241, 215), 'stroke': rgb(173, 126, 67), 'stroke_width': 2, 'z': 702}],
+            ['T', [.50, .775 + pulse, '第一次出发前，先认识这条运河'], {'font_size': 21, 'font_weight': 'bold', 'color': rgb(73, 58, 43), 'z': 703}],
+            ['T', [.50, .735 + pulse, '一份轻松的游览说明，随时可在设置中再次打开'], {'font_size': 9, 'color': rgb(139, 112, 76), 'z': 703}],
+            ['L', [[.22,.69+pulse],[.78,.69+pulse]], {'stroke': rgb(211, 180, 122), 'stroke_width': 1, 'z': 703}],
+            ['T', [.235, .635 + pulse, '情境说明'], {'font_size': 14, 'font_weight': 'bold', 'align': 'left', 'color': rgb(139, 69, 19), 'z': 703}],
+            ['T', [.235, .600 + pulse, '你坐在小船上，沿京杭大运河游览五座城市'], {'font_size': 10, 'align': 'left', 'color': rgb(91, 74, 55), 'z': 703}],
+            ['T', [.235, .568 + pulse, '靠近城市定位标后，浮窗会告诉你下一步'], {'font_size': 10, 'align': 'left', 'color': rgb(91, 74, 55), 'z': 703}],
+            ['T', [.235, .505 + pulse, '游船控制'], {'font_size': 14, 'font_weight': 'bold', 'align': 'left', 'color': rgb(139, 69, 19), 'z': 703}],
+            ['T', [.235, .470 + pulse, '按住左右箭头或键盘 ← / → 驾船，松开后会自然减速'], {'font_size': 10, 'align': 'left', 'color': rgb(91, 74, 55), 'z': 703}],
+            ['T', [.235, .438 + pulse, '航行时会有水花，速度越快水声越明显'], {'font_size': 10, 'align': 'left', 'color': rgb(91, 74, 55), 'z': 703}],
+            ['T', [.235, .375 + pulse, '探索引导'], {'font_size': 14, 'font_weight': 'bold', 'align': 'left', 'color': rgb(139, 69, 19), 'z': 703}],
+            ['T', [.235, .340 + pulse, '靠近城市后点击浮窗“探索”，或按 Enter 进入'], {'font_size': 10, 'align': 'left', 'color': rgb(91, 74, 55), 'z': 703}],
+            ['T', [.235, .308 + pulse, '在城市中选择美食，完成品鉴即可收集图鉴与印章'], {'font_size': 10, 'align': 'left', 'color': rgb(91, 74, 55), 'z': 703}],
+            ['RR', [.39, .165 + pulse, .22, .040, .018], {'fill': rgb(139, 69, 19), 'stroke': rgb(203, 157, 74), 'stroke_width': 2, 'z': 703}],
+            ['T', [.50, .179 + pulse, '开始探索'], {'font_size': 10, 'font_weight': 'bold', 'color': rgb(255, 248, 229), 'z': 704}],
         ]
 
         self.parser.parse(data, self.bounds)
@@ -937,7 +961,7 @@ class App:
                 self._loading_finished_transition = True
                 if self.audio_enabled:
                     self.music.start()
-                self.begin_transition(self.machine.finish_loading)
+                self.begin_transition(self._finish_first_loading)
 
         if self.state.mode == Mode.MAP:
             moved = self.boat.step(self.move_direction, delta_seconds)
@@ -1046,7 +1070,9 @@ class App:
             elif .67 <= nx <= .81 and .09 <= ny <= .17 and self.state.atlas_page < 5:
                 hovered = ('atlas_nav', 1)
         elif not self.state.help_open and self.state.mode == Mode.SETTINGS:
-            if .64 <= nx <= .77 and .47 <= ny <= .54:
+            if .36 <= nx <= .64 and .20 <= ny <= .27:
+                hovered = ('guide', 0)
+            elif .64 <= nx <= .77 and .47 <= ny <= .54:
                 hovered = ('audio_enabled', 0)
             elif (.64 <= nx <= .77 and .60 <= ny <= .69
                     and self.engine.supports_acceleration):
@@ -1121,7 +1147,10 @@ class App:
             elif .67 <= nx <= .81 and .09 <= ny <= .17:
                 self._turn_atlas(1)
         elif self.state.mode == Mode.SETTINGS:
-            if .64 <= nx <= .77 and .47 <= ny <= .54:
+            if .36 <= nx <= .64 and .20 <= ny <= .27:
+                self.effects.play('scroll')
+                self.begin_transition(self._open_guide_from_settings)
+            elif .64 <= nx <= .77 and .47 <= ny <= .54:
                 self.effects.play('key')
                 self._toggle_audio()
             elif .64 <= nx <= .77 and .60 <= ny <= .69:
