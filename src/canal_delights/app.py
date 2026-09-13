@@ -804,7 +804,9 @@ class App:
         """绘制首次旅程引导浮窗。"""
         pulse = .004 * math.sin(self.animation_phase * 1.7)
         data = [
-            ['R', [0, 0, 1, 1], {'fill': rgb(218, 211, 191), 'z': 700}],
+            # This is a modal overlay on the map, not a separate page.  Keep
+            # the map visible around the paper card instead of painting an
+            # opaque canvas-sized background.
             ['RR', [.155, .135 + pulse, .69, .73, .040], {'fill': rgb(106, 75, 48), 'z': 701}],
             ['RR', [.165, .145 + pulse, .67, .71, .036], {'fill': rgb(250, 241, 215), 'stroke': rgb(173, 126, 67), 'stroke_width': 2, 'z': 702}],
             ['T', [.50, .775 + pulse, '第一次出发前，先认识这条运河'], {'font_size': 21, 'font_weight': 'bold', 'color': rgb(73, 58, 43), 'z': 703}],
