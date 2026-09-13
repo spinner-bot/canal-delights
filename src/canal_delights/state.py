@@ -30,6 +30,7 @@ class AppState:
     discovered_foods: Set[str] = field(default_factory=set)  # "city_food" 格式
     stamped_cities: Set[int] = field(default_factory=set)
     help_open: bool = False
+    completion_open: bool = False
     transition_locked: bool = False
 
     def can_go_back(self) -> bool:

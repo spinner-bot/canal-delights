@@ -56,6 +56,7 @@ class App:
         self._loading_finished_transition = False
         self._loading_label = '正在加载……'
         self._guide_shown = False
+        self._completion_auto_shown = False
 
     def run(self):
         """运行应用"""
@@ -138,6 +139,8 @@ class App:
         # 绘制帮助覆盖层
         if self.state.help_open:
             self.draw_help()
+        if self.state.completion_open:
+            self.draw_completion()
 
         # 绘制状态提示
         self.draw_status()
@@ -642,6 +645,18 @@ class App:
                     ['R', [x + .065, y - .018, .145, .010], {'fill': rgb(222, 211, 185)}],
                     ['R', [x + .065, y - .018, .145 * count / 4, .010], {'fill': city['theme']}],
                 ])
+            if self.state.is_all_stamped():
+                # Trophy sits in the open space beneath Hangzhou on the
+                # right-hand page and acts as a replay button for the finale.
+                tx, ty = .80, .305 + lift
+                data.extend([
+                    ['C', [tx, ty + .026, .030], {'fill': rgb(214, 169, 62), 'stroke': rgb(139, 91, 28), 'stroke_width': 1}],
+                    ['R', [tx - .010, ty - .005, .020, .025], {'fill': rgb(214, 169, 62), 'stroke': rgb(139, 91, 28), 'stroke_width': 1}],
+                    ['R', [tx - .035, ty + .015, .020, .028], {'fill': rgb(214, 169, 62), 'stroke': rgb(139, 91, 28), 'stroke_width': 1}],
+                    ['R', [tx + .015, ty + .015, .020, .028], {'fill': rgb(214, 169, 62), 'stroke': rgb(139, 91, 28), 'stroke_width': 1}],
+                    ['R', [tx - .030, ty - .020, .060, .008], {'fill': rgb(139, 91, 28)}],
+                    ['T', [tx, ty - .050, '通关纪念'], {'font_size': 8, 'font_weight': 'bold', 'color': rgb(139, 91, 28)}],
+                ])
         else:
             city_index = page - 1
             city = cities[city_index]
@@ -827,6 +842,35 @@ class App:
 
         self.parser.parse(data, self.bounds)
 
+    def draw_completion(self):
+        """绘制叠加在地图上的通关纪念浮窗。"""
+        pulse = .003 * math.sin(self.animation_phase * 1.5)
+        text = (
+            '从北京的晨雾到杭州的晚风，你沿着一条水脉，收集了五座城的滋味。'
+            '运河不只运送粮米与百货，也把灶台的烟火、四季的鲜意和人们的乡愁，'
+            '一程一程地写进水声。北方的厚重，南方的清润，在船桨起落之间相逢；'
+            '一碗面、一笼点心、一盏茶，都是岸边人家对远客的温柔招呼。'
+            '如今图鉴已经合卷，但旅程并没有真正结束：当你再次想起这些味道，'
+            '运河仍会在记忆里缓缓流淌，带你回到那片有风、有水、有灯火的江南。'
+        )
+        lines = self._wrapped_lines(text, 31)[:8]
+        data = [
+            ['RR', [.155, .135 + pulse, .69, .73, .040], {'fill': rgb(106, 75, 48), 'z': 710}],
+            ['RR', [.165, .145 + pulse, .67, .71, .036], {'fill': rgb(250, 241, 215), 'stroke': rgb(173, 126, 67), 'stroke_width': 2, 'z': 711}],
+            ['T', [.50, .775 + pulse, '恭喜你，运河图鉴全收集'], {'font_size': 21, 'font_weight': 'bold', 'color': rgb(73, 58, 43), 'z': 712}],
+            ['T', [.50, .735 + pulse, '一册风物入手，五城烟火同行'], {'font_size': 10, 'color': rgb(139, 112, 76), 'z': 712}],
+            ['L', [[.22,.69+pulse],[.78,.69+pulse]], {'stroke': rgb(211, 180, 122), 'stroke_width': 1, 'z': 712}],
+        ]
+        for index, line in enumerate(lines):
+            data.append(['T', [.235, .645 - index * .042 + pulse, line], {
+                'font_size': 10, 'align': 'left', 'color': rgb(91, 74, 55), 'z': 712,
+            }])
+        data.extend([
+            ['RR', [.39, .165 + pulse, .22, .040, .018], {'fill': rgb(139, 69, 19), 'stroke': rgb(203, 157, 74), 'stroke_width': 2, 'z': 712}],
+            ['T', [.50, .179 + pulse, '继续游览'], {'font_size': 10, 'font_weight': 'bold', 'color': rgb(255, 248, 229), 'z': 713}],
+        ])
+        self.parser.parse(data, self.bounds)
+
     def draw_status(self):
         """绘制状态提示"""
         mode_names = {
@@ -859,10 +903,23 @@ class App:
             # unlock only for the atomic midpoint scene change.
             self.state.transition_locked = False
             action()
+            self._maybe_open_completion()
             self.state.transition_locked = True
             self.hovered_item = None
 
         self.transition.start(switch_scene)
+
+    def _maybe_open_completion(self):
+        """在完成收集后再次抵达地图时打开一次通关浮窗。"""
+        if (self.state.mode == Mode.MAP and self.state.is_all_stamped()
+                and not self._completion_auto_shown):
+            self.state.completion_open = True
+            self._completion_auto_shown = True
+
+    def _open_completion_from_atlas(self):
+        """从图鉴奖杯回到地图，并重新打开通关浮窗。"""
+        self.machine.back()
+        self.state.completion_open = True
 
     def on_enter(self):
         """Enter 键"""
@@ -872,13 +929,17 @@ class App:
             self.machine.toggle_help()
             self.render()
             return
+        if self.state.completion_open:
+            self.state.completion_open = False
+            self.render()
+            return
 
         if self.state.mode == Mode.INTRO:
             self.effects.play('key')
             self.begin_transition(self._enter_journey)
         elif self.state.mode == Mode.MAP:
             if self.state.is_all_stamped():
-                self.begin_transition(self.machine.go_to_finale)
+                self.state.completion_open = True
             elif self.boat.nearby_city() is not None:
                 self.state.current_city = self.boat.nearby_city()
                 self.effects.play('fresh')
@@ -900,6 +961,8 @@ class App:
         """Esc 键"""
         if self.state.help_open:
             self.machine.toggle_help()
+        elif self.state.completion_open:
+            self.state.completion_open = False
         elif self.state.mode == Mode.FINALE:
             self.begin_transition(self.machine.return_from_finale)
         elif self.state.mode != Mode.INTRO:
@@ -1098,6 +1161,11 @@ class App:
             self.machine.toggle_help()
             self.render()
             return
+        if self.state.completion_open:
+            self.effects.play('key')
+            self.state.completion_open = False
+            self.render()
+            return
 
         nx, ny = x / CANVAS_WIDTH, y / CANVAS_HEIGHT
         if self.state.can_go_back() and .045 <= nx <= .17 and .86 <= ny <= .95:
@@ -1144,7 +1212,11 @@ class App:
                 self.effects.play('stamp')
                 self.begin_transition(self.machine.complete_tasting)
         elif self.state.mode == Mode.ATLAS:
-            if .19 <= nx <= .33 and .09 <= ny <= .17:
+            if (self.state.atlas_page == 0 and self.state.is_all_stamped()
+                    and .74 <= nx <= .88 and .25 <= ny <= .38):
+                self.effects.play('stamp')
+                self.begin_transition(self._open_completion_from_atlas)
+            elif .19 <= nx <= .33 and .09 <= ny <= .17:
                 self._turn_atlas(-1)
             elif .67 <= nx <= .81 and .09 <= ny <= .17:
                 self._turn_atlas(1)
