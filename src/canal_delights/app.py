@@ -278,8 +278,8 @@ class App:
             }],
             ['RR', [.25, .34, .50, .028, .014], {'fill': rgb(214, 202, 174), 'stroke': rgb(174, 137, 82), 'stroke_width': 1}],
             ['RR', [.25, .34, .50*progress, .028, .014], {'fill': rgb(70, 145, 132)}],
-            ['T', [.50, .295, f'{round(progress*100)}%'], {'font_size': 11, 'color': rgb(112, 89, 60)}],
-            ['T', [.50, .250, self._loading_label], {'font_size': 9, 'color': rgb(157, 132, 98)}],
+            ['T', [.50, .385, self._loading_label], {'font_size': 8, 'color': rgb(164, 143, 113)}],
+            ['T', [.50, .285, f'{round(progress*100)}%'], {'font_size': 17, 'font_weight': 'bold', 'color': rgb(89, 112, 84)}],
         ]
         self.parser.parse(data, self.bounds)
 
