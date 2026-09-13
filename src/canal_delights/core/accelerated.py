@@ -20,9 +20,11 @@ class AcceleratedDrawingEngine(DrawingEngine):
 
     def __init__(self, width: int = 1200, height: int = 800):
         super().__init__(width, height)
+        self.supports_acceleration = True
+        self.acceleration_enabled = True
         self.mode_name = 'accelerated'
         self._canvas_items_by_layer = {'content': []}
-        self.screen.title("运河四季·美食绘卷（加速模式）")
+        self.screen.title("运河风物志 Canal Delights（加速模式）")
 
     @property
     def _canvas_items(self) -> List[int]:
@@ -32,6 +34,17 @@ class AcceleratedDrawingEngine(DrawingEngine):
     def _remember(self, item: int) -> int:
         self._canvas_items.append(item)
         return item
+
+    def set_acceleration(self, enabled: bool):
+        """Switch between batch Canvas and genuine Turtle drawing in-place."""
+        enabled = bool(enabled)
+        if enabled == self.acceleration_enabled:
+            return
+        self.clear()
+        self.acceleration_enabled = enabled
+        self.mode_name = 'accelerated' if enabled else 'pure'
+        suffix = '加速模式' if enabled else '纯 Turtle 模式'
+        self.screen.title(f"运河风物志 Canal Delights（{suffix}）")
 
     def clear(self, layer=None):
         """Delete retained accelerated items in one layer or in all layers."""
@@ -43,6 +56,8 @@ class AcceleratedDrawingEngine(DrawingEngine):
         super().clear(layer)
 
     def draw_point(self, x: float, y: float, size: float, color: RGB):
+        if not self.acceleration_enabled:
+            return super().draw_point(x, y, size, color)
         # Use a compact polygon rather than a Turtle dot operation.  At normal
         # UI sizes 16 sides are visually indistinguishable from an oval.
         radius = max(0.5, size / 2)
@@ -57,12 +72,16 @@ class AcceleratedDrawingEngine(DrawingEngine):
         self, x1: float, y1: float, x2: float, y2: float,
         color: RGB, width: float = 1.0,
     ):
+        if not self.acceleration_enabled:
+            return super().draw_line(x1, y1, x2, y2, color, width)
         self.draw_polyline([(x1, y1), (x2, y2)], color, width)
 
     def draw_polyline(
         self, points: List[Point], color: RGB,
         width: float = 1.0, close: bool = False,
     ):
+        if not self.acceleration_enabled:
+            return super().draw_polyline(points, color, width, close)
         if not points:
             return
         coords = list(points)
@@ -75,6 +94,8 @@ class AcceleratedDrawingEngine(DrawingEngine):
         self._remember(item)
 
     def _fill_polygon(self, points: List[Point], color: RGB):
+        if not self.acceleration_enabled:
+            return super()._fill_polygon(points, color)
         if not points:
             return
         item = self.screen._createpoly()
@@ -89,6 +110,10 @@ class AcceleratedDrawingEngine(DrawingEngine):
         font_family: str = 'Microsoft YaHei', align: str = 'center',
         weight: str = 'normal',
     ):
+        if not self.acceleration_enabled:
+            return super().draw_text(
+                text, x, y, font_size, color, font_family, align, weight,
+            )
         turtle_align = align if align in {'left', 'center', 'right'} else 'center'
         item, _ = self.screen._write(
             (x, y), text, turtle_align,

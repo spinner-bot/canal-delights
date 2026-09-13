@@ -615,7 +615,7 @@ class App:
         self.parser.parse(data, self.bounds)
 
     def draw_settings(self):
-        """绘制设置页；音量值可调，音频播放接口留待资源接入。"""
+        """绘制设置页；主音量连接代码演奏，音效接口保持预留。"""
         pulse = .006 * math.sin(self.animation_phase * 1.8)
         accelerated = self.engine.mode_name == 'accelerated'
         acceleration_available = self.engine.supports_acceleration
@@ -666,9 +666,9 @@ class App:
         audio_status = ('曲谱由程序实时合成 · 不依赖外部音频文件'
                         if self.music.available else '当前平台无系统音频接口 · 已静默运行')
         data.extend([
-            ['T', [.50, .265 + pulse, status], {'font_size': 10, 'color': rgb(119, 97, 70)}],
-            ['T', [.50, .230 + pulse, audio_status], {'font_size': 9, 'color': rgb(156, 137, 106)}],
-            ['T', [.50, .205 + pulse, '交互音效接口预留'], {'font_size': 8, 'color': rgb(171, 151, 119)}],
+            ['T', [.50, .272 + pulse, status], {'font_size': 10, 'color': rgb(119, 97, 70)}],
+            ['T', [.50, .243 + pulse, audio_status], {'font_size': 9, 'color': rgb(156, 137, 106)}],
+            ['T', [.50, .217 + pulse, '交互音效接口预留'], {'font_size': 8, 'color': rgb(171, 151, 119)}],
         ])
         self.parser.parse(data, self.bounds)
 

@@ -100,6 +100,10 @@ class AnimationClock:
         if not self.running:
             self.start()
 
+    def set_fps(self, fps: int):
+        """Update the cadence used for subsequent timer ticks."""
+        self.frame_ms = max(1, round(1000 / fps))
+
     def start(self):
         if self.running:
             return
