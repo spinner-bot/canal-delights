@@ -1,6 +1,6 @@
 import pytest
 
-from canal_delights.core.animation import SceneTransition, Tween, ease_in_out_cubic, ease_out_cubic
+from canal_delights.core.animation import AnimationClock, SceneTransition, Tween, ease_in_out_cubic, ease_out_cubic
 
 
 @pytest.mark.parametrize('easing', [ease_out_cubic, ease_in_out_cubic])
@@ -35,3 +35,10 @@ def test_scene_transition_switches_once_at_midpoint():
     transition.step(.29)
     assert not transition.active
     assert transition.cover == 0
+
+
+def test_animation_clock_can_change_cadence():
+    clock = AnimationClock(object(), fps=30)
+    assert clock.frame_ms == 33
+    clock.set_fps(10)
+    assert clock.frame_ms == 100
