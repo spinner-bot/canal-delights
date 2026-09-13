@@ -736,12 +736,8 @@ class App:
         status = '已启用 Canvas 批量渲染' if accelerated else '当前使用纯 Turtle 渲染'
         if not acceleration_available:
             status += '（命令行兼容模式）'
-        audio_status = ('曲谱由程序实时合成 · 不依赖外部音频文件'
-                        if self.music.available else '当前平台无系统音频接口 · 已静默运行')
         data.extend([
             ['T', [.50, .272 + pulse, status], {'font_size': 10, 'color': rgb(119, 97, 70)}],
-            ['T', [.50, .243 + pulse, audio_status], {'font_size': 9, 'color': rgb(156, 137, 106)}],
-            ['T', [.50, .217 + pulse, '音乐与交互音效均由代码实时演奏'], {'font_size': 8, 'color': rgb(171, 151, 119)}],
         ])
         self.parser.parse(data, self.bounds)
 
