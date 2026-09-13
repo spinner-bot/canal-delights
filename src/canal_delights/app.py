@@ -783,7 +783,7 @@ class App:
             ['L', [[1 - half, .03], [1 - half, .97]], {'stroke': rgb(169, 124, 65), 'stroke_width': 3, 'z': 910}],
         ]
         if cover > .84:
-            data.append(['T', [.5, .49, '京杭大运河'], {'font_size': 18, 'color': rgb(126, 82, 48), 'z': 920}])
+            data.append(['T', [.5, .49, 'Canal delights'], {'font_size': 18, 'color': rgb(126, 82, 48), 'z': 920}])
         self.parser.parse(data, self.bounds)
 
     def draw_finale(self):
