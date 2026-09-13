@@ -3,6 +3,8 @@ from __future__ import annotations
 from array import array
 from dataclasses import dataclass
 import io, math, random, sys, threading, time, wave
+from .audio_codec import decode_wav
+from .embedded_bgm import BGM_WAV_ZLIB_BASE64
 
 SAMPLE_RATE, DEFAULT_BPM, FULL_SCALE = 11025, 120, 32767
 
@@ -203,7 +205,7 @@ class ScorePlayer:
     def available(self): return self.sound is not None
     def _perform_suite(self):
         try:
-            payload = self._suite_cache or render_canal_suite(volume=self.volume)
+            payload = self._suite_cache or self._load_payload()
             self._suite_cache = payload
             params,frames=_wav_timeline(payload)
             duration=len(frames)/(params.framerate*params.nchannels*params.sampwidth)
@@ -237,6 +239,16 @@ class ScorePlayer:
         value=max(0.,min(1.,volume))
         if value != self.volume:self._suite_cache=None
         self.volume=value
+    def _load_payload(self):
+        """Prefer the packaged composition; retain synthesis as dev fallback."""
+        if BGM_WAV_ZLIB_BASE64:
+            try:
+                return decode_wav(BGM_WAV_ZLIB_BASE64)
+            except ValueError:
+                pass
+        return render_canal_suite(volume=self.volume)
+    def prepare(self):
+        self._suite_cache = self._suite_cache or self._load_payload()
     def prepare(self):
         if self._suite_cache is None:self._suite_cache=render_canal_suite(volume=self.volume)
     def set_enabled(self,enabled):
