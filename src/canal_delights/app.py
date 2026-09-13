@@ -269,7 +269,8 @@ class App:
         progress = max(0., min(1., self._loading_progress))
         data = [
             ['T', [.50, .68, '正在展开运河长卷'], {'font_size': 27, 'font_weight': 'bold', 'color': rgb(73, 60, 46)}],
-            ['T', [.50, .625, self._loading_label], {'font_size': 11, 'color': rgb(139, 109, 72)}],
+            ['T', [.50, .625, '资源加载中，请耐心等待'], {'font_size': 11, 'color': rgb(139, 109, 72)}],
+            ['T', [.50, .585, self._loading_label], {'font_size': 9, 'color': rgb(157, 132, 98)}],
             ['B', [[.17,.46],[.27,.49+wave_x*.10],[.39,.45-wave_x*.08],[.50,.46]], {
                 'stroke': rgb(89, 154, 161), 'stroke_width': 5,
             }],
