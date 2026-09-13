@@ -7,5 +7,7 @@ def test_video_extraction_command_discards_video_and_normalizes_pcm():
     command = build_command('ffmpeg', Path('source.mp4'), Path('bgm.wav'))
     assert command == [
         'ffmpeg', '-y', '-i', 'source.mp4', '-vn',
-        '-acodec', 'pcm_s16le', '-ar', '22050', '-ac', '2', 'bgm.wav',
+        '-acodec', 'pcm_s24le', '-ac', '2', 'bgm.wav',
     ]
+
+    assert '-ar' in build_command('ffmpeg', Path('source.mp4'), Path('bgm.wav'), 48000)

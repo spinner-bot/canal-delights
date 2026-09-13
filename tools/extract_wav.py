@@ -15,17 +15,19 @@ import sys
 import wave
 
 
-def build_command(ffmpeg: str, video: Path, output: Path, sample_rate: int = 22050) -> list[str]:
+def build_command(ffmpeg: str, video: Path, output: Path, sample_rate: int | None = None,
+                  sample_format: str = 'pcm_s24le') -> list[str]:
     """Return a deterministic ffmpeg extraction command."""
-    return [
-        ffmpeg, '-y', '-i', str(video), '-vn',
-        '-acodec', 'pcm_s16le', '-ar', str(sample_rate), '-ac', '2',
-        str(output),
-    ]
+    command = [ffmpeg, '-y', '-i', str(video), '-vn', '-acodec', sample_format]
+    if sample_rate is not None:
+        command.extend(['-ar', str(sample_rate)])
+    command.extend(['-ac', '2', str(output)])
+    return command
 
 
-def extract_wav(video: Path, output: Path, ffmpeg: str = 'ffmpeg', sample_rate: int = 22050) -> Path:
-    """Extract video audio as stereo 16-bit PCM WAV and validate the result."""
+def extract_wav(video: Path, output: Path, ffmpeg: str = 'ffmpeg', sample_rate: int | None = None,
+                sample_format: str = 'pcm_s24le') -> Path:
+    """Extract high-precision stereo PCM WAV, preserving source rate by default."""
     video, output = Path(video), Path(output)
     if not video.is_file():
         raise FileNotFoundError(f'video not found: {video}')
@@ -38,8 +40,10 @@ def extract_wav(video: Path, output: Path, ffmpeg: str = 'ffmpeg', sample_rate: 
     except subprocess.CalledProcessError as exc:
         raise RuntimeError(f'ffmpeg extraction failed with exit code {exc.returncode}') from exc
     with wave.open(str(output), 'rb') as wav:
-        if wav.getnchannels() != 2 or wav.getsampwidth() != 2 or wav.getframerate() != sample_rate:
-            raise RuntimeError('extracted WAV does not match stereo 16-bit target format')
+        if wav.getnchannels() != 2 or wav.getsampwidth() not in (2, 3, 4):
+            raise RuntimeError('extracted WAV does not match stereo PCM target format')
+        if sample_rate is not None and wav.getframerate() != sample_rate:
+            raise RuntimeError('extracted WAV sample rate does not match requested target')
         if wav.getnframes() == 0:
             raise RuntimeError('extracted WAV contains no audio frames')
     return output
@@ -50,10 +54,11 @@ def main() -> int:
     parser.add_argument('video', type=Path)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--ffmpeg', default='ffmpeg', help='ffmpeg executable or full path')
-    parser.add_argument('--sample-rate', type=int, default=22050)
+    parser.add_argument('--sample-rate', type=int, default=None, help='optional resample rate; omitted preserves source rate')
+    parser.add_argument('--sample-format', choices=('pcm_s16le', 'pcm_s24le', 'pcm_s32le'), default='pcm_s24le')
     args = parser.parse_args()
     try:
-        result = extract_wav(args.video, args.output, args.ffmpeg, args.sample_rate)
+        result = extract_wav(args.video, args.output, args.ffmpeg, args.sample_rate, args.sample_format)
     except (FileNotFoundError, RuntimeError) as exc:
         print(f'error: {exc}', file=sys.stderr)
         return 2
