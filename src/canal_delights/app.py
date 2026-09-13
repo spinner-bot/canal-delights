@@ -270,7 +270,6 @@ class App:
         data = [
             ['T', [.50, .68, '正在展开运河长卷'], {'font_size': 27, 'font_weight': 'bold', 'color': rgb(73, 60, 46)}],
             ['T', [.50, .625, '资源加载中，请耐心等待'], {'font_size': 11, 'color': rgb(139, 109, 72)}],
-            ['T', [.50, .585, self._loading_label], {'font_size': 9, 'color': rgb(157, 132, 98)}],
             ['B', [[.17,.46],[.27,.49+wave_x*.10],[.39,.45-wave_x*.08],[.50,.46]], {
                 'stroke': rgb(89, 154, 161), 'stroke_width': 5,
             }],
@@ -280,6 +279,7 @@ class App:
             ['RR', [.25, .34, .50, .028, .014], {'fill': rgb(214, 202, 174), 'stroke': rgb(174, 137, 82), 'stroke_width': 1}],
             ['RR', [.25, .34, .50*progress, .028, .014], {'fill': rgb(70, 145, 132)}],
             ['T', [.50, .295, f'{round(progress*100)}%'], {'font_size': 11, 'color': rgb(112, 89, 60)}],
+            ['T', [.50, .250, self._loading_label], {'font_size': 9, 'color': rgb(157, 132, 98)}],
         ]
         self.parser.parse(data, self.bounds)
 
