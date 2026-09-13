@@ -14,6 +14,7 @@ class Mode(Enum):
     CITY = auto()         # 城市场景
     FOOD_DETAIL = auto()  # 美食详情
     ATLAS = auto()        # 美食图鉴
+    SETTINGS = auto()     # 设置
     FINALE = auto()       # 终章长卷
 
 
@@ -32,7 +33,7 @@ class AppState:
 
     def can_go_back(self) -> bool:
         """是否可以返回上一级"""
-        return self.mode in [Mode.MAP, Mode.CITY, Mode.FOOD_DETAIL, Mode.ATLAS]
+        return self.mode in [Mode.MAP, Mode.CITY, Mode.FOOD_DETAIL, Mode.ATLAS, Mode.SETTINGS]
 
     def is_all_stamped(self) -> bool:
         """是否五城全部盖章"""
@@ -108,6 +109,8 @@ class StateMachine:
             self.state.mode = Mode.MAP
         elif self.state.mode == Mode.ATLAS:
             self.state.mode = Mode.MAP
+        elif self.state.mode == Mode.SETTINGS:
+            self.state.mode = Mode.MAP
         elif self.state.mode == Mode.MAP:
             self.state.mode = Mode.INTRO
 
@@ -123,6 +126,11 @@ class StateMachine:
             self.state.atlas_page = max(
                 0, min(self.city_count, self.state.atlas_page + direction),
             )
+
+    def open_settings(self):
+        """从地图打开设置。"""
+        if self.state.mode == Mode.MAP and not self.state.transition_locked:
+            self.state.mode = Mode.SETTINGS
 
     def start_journey(self):
         """开始旅程"""
