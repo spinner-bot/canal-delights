@@ -29,6 +29,15 @@ def test_atlas_opens_from_map_and_pages_are_bounded():
     assert state.mode is Mode.MAP
 
 
+def test_settings_opens_from_map_and_returns_to_map():
+    state = AppState(mode=Mode.MAP)
+    machine = StateMachine(state)
+    machine.open_settings()
+    assert state.mode is Mode.SETTINGS
+    machine.back()
+    assert state.mode is Mode.MAP
+
+
 def test_finale_only_opens_after_all_city_stamps():
     state = AppState(mode=Mode.MAP)
     machine = StateMachine(state)
