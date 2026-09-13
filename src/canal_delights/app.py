@@ -13,6 +13,7 @@ from .core.navigation import (
 )
 from .core.splash import SplashSystem
 from .core.music import ScorePlayer
+from .core.sound_effects import EffectPlayer
 from .core.renderer import DrawingDataParser
 from .config import linear_gradient, rgb, CANVAS_WIDTH, CANVAS_HEIGHT, CANVAS_BG
 from .content.catalog import get_all_cities, get_city, get_food
@@ -45,6 +46,7 @@ class App:
         self.master_volume = .72
         self.effects_volume = .82
         self.music = ScorePlayer(volume=self.master_volume)
+        self.effects = EffectPlayer(volume=self.effects_volume)
 
     def run(self):
         """运行应用"""
@@ -90,6 +92,7 @@ class App:
             self.engine.mainloop()
         finally:
             self.music.stop()
+            self.effects.stop()
 
     def render(self):
         """渲染当前帧"""
@@ -778,16 +781,20 @@ class App:
             return
 
         if self.state.mode == Mode.INTRO:
+            self.effects.play('key')
             self.begin_transition(self.machine.start_journey)
         elif self.state.mode == Mode.MAP:
             if self.state.is_all_stamped():
                 self.begin_transition(self.machine.go_to_finale)
             elif self.boat.nearby_city() is not None:
                 self.state.current_city = self.boat.nearby_city()
+                self.effects.play('fresh')
                 self.begin_transition(self.machine.enter_city)
         elif self.state.mode == Mode.CITY:
+            self.effects.play('scroll')
             self.begin_transition(self.machine.open_food)
         elif self.state.mode == Mode.FOOD_DETAIL:
+            self.effects.play('stamp')
             self.begin_transition(self.machine.complete_tasting)
         elif self.state.mode == Mode.ATLAS:
             self._turn_atlas(1)
@@ -839,6 +846,7 @@ class App:
         previous = self.state.atlas_page
         self.machine.turn_atlas(direction)
         if self.state.atlas_page != previous:
+            self.effects.play('page')
             self.book_turn = float(direction)
             self.render()
 
@@ -869,6 +877,9 @@ class App:
             nearby = self.boat.nearby_city()
             if nearby is not None:
                 self.state.current_city = nearby
+            self.effects.set_water_level(abs(self.boat.velocity) / self.boat.max_speed)
+        else:
+            self.effects.set_water_level(0)
         self.render()
         return True
 
@@ -907,6 +918,7 @@ class App:
             self.music.set_volume(value)
         else:
             self.effects_volume = value
+            self.effects.set_volume(value)
 
     def on_motion(self, x, y):
         """Update semantic hover state without redrawing for every pixel."""
@@ -968,10 +980,14 @@ class App:
         if self.state.transition_locked:
             return
         if self.state.help_open:
+            self.effects.play('key')
             self.machine.toggle_help()
             self.render()
             return
 
+        # A restrained key tap accompanies ordinary controls; richer actions
+        # below add their contextual scroll/page/stamp sound as well.
+        self.effects.play('key')
         nx, ny = x / CANVAS_WIDTH, y / CANVAS_HEIGHT
         if self.state.mode != Mode.INTRO and .045 <= nx <= .17 and .86 <= ny <= .95:
             if self.state.mode == Mode.FINALE:
@@ -985,6 +1001,7 @@ class App:
             if .825 <= nx <= .955 and .85 <= ny <= .94:
                 self.begin_transition(self.machine.open_settings)
             elif .04 <= nx <= .21 and .05 <= ny <= .17:
+                self.effects.play('scroll')
                 self.begin_transition(self.machine.open_atlas)
             else:
                 nearby = self.boat.nearby_city()
@@ -992,6 +1009,7 @@ class App:
                     nx, ny, self._preview_layout(nearby)[-1],
                 ):
                     self.state.current_city = nearby
+                    self.effects.play('fresh')
                     self.begin_transition(self.machine.enter_city)
                 elif .045 <= nx <= .14 and .37 <= ny <= .51:
                     self.boat.nudge(-1)
@@ -1002,10 +1020,12 @@ class App:
             for index, (px, py) in enumerate(FOOD_POSITIONS[city_id]):
                 if (px - nx) ** 2 + (py - ny) ** 2 <= .010:
                     self.state.current_food = index
+                    self.effects.play('scroll')
                     self.begin_transition(self.machine.open_food)
                     break
         elif self.state.mode == Mode.FOOD_DETAIL:
             if .73 <= nx <= .91 and .16 <= ny <= .25:
+                self.effects.play('stamp')
                 self.begin_transition(self.machine.complete_tasting)
         elif self.state.mode == Mode.ATLAS:
             if .19 <= nx <= .33 and .09 <= ny <= .17:
