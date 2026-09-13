@@ -890,7 +890,7 @@ class App:
         data = [
             ['T', [0.95, 0.065, f'FPS: {round(self._fps):02d}  [{mode_name}]'], {
                 'font_size': 12, 'font_weight': 'bold',
-                'color': rgb(116, 93, 64), 'align': 'right',
+                'color': rgb(169, 151, 124), 'align': 'right',
             }],
         ]
         self.parser.parse(data, self.bounds)
