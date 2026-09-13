@@ -21,6 +21,9 @@ def main() -> None:
         name = '.'.join(parts)
         modules[name] = path.read_text(encoding='utf-8')
     modules['canal_delights.core.embedded_mp3'] = 'BGM_MP3_BASE64 = __canal_audio_payload__\n'
+    # Compatibility module: the compact build uses MP3, so the legacy WAV
+    # payload is intentionally empty while the import contract remains.
+    modules['canal_delights.core.embedded_bgm'] = 'BGM_WAV_ZLIB_BASE64 = \'\'\n'
     mp3 = base64.b64encode((ROOT / 'resource' / 'BGM_preview_48k.mp3').read_bytes()).decode('ascii')
     source_modules = repr(modules)
     source_packages = repr(sorted(packages))
