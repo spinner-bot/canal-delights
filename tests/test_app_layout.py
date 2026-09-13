@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 
 from canal_delights.app import App
-from canal_delights.state import Mode
+from canal_delights.state import AppState, Mode
 
 
 def test_preview_height_tracks_wrapped_description():
@@ -53,3 +53,20 @@ def test_runtime_acceleration_updates_cadence_and_particle_budget():
     app._toggle_acceleration()
     assert app.engine.mode_name == 'accelerated'
     assert app.fps == 30
+
+
+def test_click_sound_only_fires_for_a_real_hit_target():
+    app = object.__new__(App)
+    app.state = AppState(mode=Mode.MAP)
+    calls = []
+    app.effects = SimpleNamespace(play=calls.append)
+    app.boat = SimpleNamespace(nearby_city=lambda: None, nudge=lambda _direction: None)
+    app.machine = SimpleNamespace(open_atlas=lambda: None)
+    app.begin_transition = lambda _action: None
+    app.render = lambda: None
+
+    app.on_click(600, 600)  # blank map area
+    assert calls == []
+
+    app.on_click(100, 80)  # visible atlas-book button
+    assert calls == ['scroll']

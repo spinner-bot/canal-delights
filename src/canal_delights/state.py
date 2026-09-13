@@ -10,6 +10,7 @@ from typing import Set
 class Mode(Enum):
     """应用模式"""
     INTRO = auto()        # 开场卷轴
+    LOADING = auto()      # 首次音频与场景预热
     MAP = auto()          # 运河地图
     CITY = auto()         # 城市场景
     FOOD_DETAIL = auto()  # 美食详情
@@ -135,6 +136,14 @@ class StateMachine:
     def start_journey(self):
         """开始旅程"""
         if self.state.mode == Mode.INTRO and not self.state.transition_locked:
+            self.state.mode = Mode.MAP
+
+    def start_loading(self):
+        if self.state.mode == Mode.INTRO and not self.state.transition_locked:
+            self.state.mode = Mode.LOADING
+
+    def finish_loading(self):
+        if self.state.mode == Mode.LOADING and not self.state.transition_locked:
             self.state.mode = Mode.MAP
 
     def go_to_finale(self):

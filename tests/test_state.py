@@ -48,3 +48,13 @@ def test_finale_only_opens_after_all_city_stamps():
     state.stamped_cities.update(range(5))
     machine.go_to_finale()
     assert state.mode is Mode.FINALE
+
+
+def test_first_journey_has_explicit_loading_stage():
+    state = AppState()
+    machine = StateMachine(state)
+    machine.start_loading()
+    assert state.mode is Mode.LOADING
+    assert not state.can_go_back()
+    machine.finish_loading()
+    assert state.mode is Mode.MAP

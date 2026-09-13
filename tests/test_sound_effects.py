@@ -1,7 +1,7 @@
 import struct
 import wave
 from io import BytesIO
-from canal_delights.core.sound_effects import EFFECT_DURATIONS, synthesize_effect
+from canal_delights.core.sound_effects import EFFECT_DURATIONS, EffectPlayer, synthesize_effect
 
 
 def test_all_effects_are_embedded_short_wavs():
@@ -32,3 +32,10 @@ def test_water_strength_tracks_boat_speed_ratio():
     q = struct.unpack(f'<{(len(quiet)-44)//2}h', quiet[44:])
     f = struct.unpack(f'<{(len(fast)-44)//2}h', fast[44:])
     assert sum(abs(v) for v in f) > sum(abs(v) for v in q) * 3
+
+
+def test_effect_cache_is_invalidated_when_volume_changes():
+    player = EffectPlayer(volume=.8, sound_module=None)
+    player._cache['key'] = b'old'
+    player.set_volume(.3)
+    assert player._cache == {}

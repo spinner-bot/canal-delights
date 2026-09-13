@@ -132,14 +132,17 @@ class EffectPlayer:
         if sound_module is None:
             try: import winsound as sound_module
             except ImportError: sound_module=None
-        self.sound,self.volume=sound_module,volume; self.water_level=0.; self._stopped=threading.Event(); self._water_thread=None
-    def set_volume(self,volume): self.volume=max(0.,min(1.,volume))
+        self.sound,self.volume=sound_module,volume; self.enabled=True; self.water_level=0.; self._cache={}; self._stopped=threading.Event(); self._water_thread=None
+    def set_volume(self,volume):
+        value=max(0.,min(1.,volume))
+        if value != self.volume:self._cache.clear()
+        self.volume=value
     def _perform(self,payload):
         try: self.sound.PlaySound(payload,self.sound.SND_MEMORY)
         except RuntimeError: pass
     def play(self,kind):
-        if not self.sound or self.volume<=0:return
-        payload=synthesize_effect(kind,self.volume)
+        if not self.sound or not self.enabled or self.volume<=0:return
+        payload=self._cache.get(kind) or synthesize_effect(kind,self.volume)
         threading.Thread(target=self._perform,args=(payload,),daemon=True).start()
     def set_water_level(self,level):
         self.water_level=max(0.,min(1.,level))
@@ -147,5 +150,11 @@ class EffectPlayer:
             self._stopped.clear(); self._water_thread=threading.Thread(target=self._water_loop,daemon=True); self._water_thread.start()
     def _water_loop(self):
         while not self._stopped.is_set() and self.water_level>.02:
-            if self.sound and self.volume>0:self._perform(synthesize_effect('water',self.volume,water_level=self.water_level))
+            if self.sound and self.enabled and self.volume>0:self._perform(synthesize_effect('water',self.volume,water_level=self.water_level))
     def stop(self): self._stopped.set(); self.water_level=0.
+    def prepare(self):
+        for kind in EFFECT_DURATIONS:
+            if kind != 'water':self._cache[kind]=synthesize_effect(kind,self.volume)
+    def set_enabled(self,enabled):
+        self.enabled=bool(enabled)
+        if not self.enabled:self.stop()

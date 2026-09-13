@@ -173,22 +173,33 @@ class ScorePlayer:
         if sound_module is None:
             try: import winsound as sound_module
             except ImportError: sound_module=None
-        self.sound=sound_module; self.volume=max(0.,min(1.,volume)); self.playing=False; self._buffer=None; self._thread=None; self._stop_event=threading.Event()
+        self.sound=sound_module; self.volume=max(0.,min(1.,volume)); self.enabled=True; self.playing=False; self._buffer=None; self._suite_cache=None; self._thread=None; self._stop_event=threading.Event()
     @property
     def available(self): return self.sound is not None
     def _perform_suite(self):
         try:
-            for chunk in _wav_chunks(render_canal_suite(volume=self.volume)):
+            payload = self._suite_cache or render_canal_suite(volume=self.volume)
+            self._suite_cache = payload
+            for chunk in _wav_chunks(payload):
                 if self._stop_event.is_set(): return
                 self._buffer=chunk; self.sound.PlaySound(chunk,self.sound.SND_MEMORY)
         except RuntimeError: pass
         finally: self.playing=False
     def start(self):
-        if not self.available:return False
+        if not self.available or not self.enabled:return False
         if self._thread and self._thread.is_alive():return True
         self.playing=True; self._stop_event.clear(); self._thread=threading.Thread(target=self._perform_suite,name='canal-score-player',daemon=True); self._thread.start(); return True
     def stop(self):
         self._stop_event.set(); self.playing=False
         if self._thread and self._thread is not threading.current_thread(): self._thread.join(timeout=1.2)
         self._thread=None
-    def set_volume(self,volume): self.volume=max(0.,min(1.,volume))
+    def set_volume(self,volume):
+        value=max(0.,min(1.,volume))
+        if value != self.volume:self._suite_cache=None
+        self.volume=value
+    def prepare(self):
+        if self._suite_cache is None:self._suite_cache=render_canal_suite(volume=self.volume)
+    def set_enabled(self,enabled):
+        self.enabled=bool(enabled)
+        if not self.enabled:self.stop()
+        elif not self.playing:self.start()

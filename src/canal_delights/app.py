@@ -3,6 +3,7 @@
 """
 
 import math
+import threading
 
 from .state import AppState, StateMachine, Mode
 from .core.backend import RenderMode, create_engine
@@ -47,6 +48,12 @@ class App:
         self.effects_volume = .82
         self.music = ScorePlayer(volume=self.master_volume)
         self.effects = EffectPlayer(volume=self.effects_volume)
+        self.audio_enabled = True
+        self._loading_started = False
+        self._loading_progress = 0.0
+        self._loading_target = 0.0
+        self._loading_complete = False
+        self._loading_finished_transition = False
 
     def run(self):
         """运行应用"""
@@ -87,7 +94,6 @@ class App:
         self.engine.listen()
         self.render()
         self.animations.add(self.on_animation_frame)
-        self.music.start()
         try:
             self.engine.mainloop()
         finally:
@@ -109,6 +115,8 @@ class App:
         # 根据模式绘制内容
         if self.state.mode == Mode.INTRO:
             self.draw_intro()
+        elif self.state.mode == Mode.LOADING:
+            self.draw_loading()
         elif self.state.mode == Mode.MAP:
             self.draw_map()
         elif self.state.mode == Mode.CITY:
@@ -122,7 +130,7 @@ class App:
         elif self.state.mode == Mode.FINALE:
             self.draw_finale()
 
-        if self.state.mode != Mode.INTRO:
+        if self.state.mode not in (Mode.INTRO, Mode.LOADING):
             self.draw_back_button()
 
         # 绘制帮助覆盖层
@@ -253,6 +261,40 @@ class App:
             ['T', [0.5, 0.12, 'Enter 或点击'], {'font_size': 10, 'color': rgb(150, 138, 116)}],
         ]
         self.parser.parse(data, self.bounds)
+
+    def draw_loading(self):
+        """One-time animated preheating screen shown before the first map."""
+        wave_x = .08 * math.sin(self.animation_phase * 2.2)
+        progress = max(0., min(1., self._loading_progress))
+        data = [
+            ['T', [.50, .68, '正在展开运河长卷'], {'font_size': 27, 'font_weight': 'bold', 'color': rgb(73, 60, 46)}],
+            ['T', [.50, .625, '调弦 · 润色 · 汇入清波'], {'font_size': 11, 'color': rgb(139, 109, 72)}],
+            ['B', [[.17,.46],[.27,.49+wave_x*.10],[.39,.45-wave_x*.08],[.50,.46]], {
+                'stroke': rgb(89, 154, 161), 'stroke_width': 5,
+            }],
+            ['B', [[.50,.46],[.61,.49+wave_x*.06],[.73,.45-wave_x*.08],[.83,.46]], {
+                'stroke': rgb(89, 154, 161), 'stroke_width': 5,
+            }],
+            ['RR', [.25, .34, .50, .028, .014], {'fill': rgb(214, 202, 174), 'stroke': rgb(174, 137, 82), 'stroke_width': 1}],
+            ['RR', [.25, .34, .50*progress, .028, .014], {'fill': rgb(70, 145, 132)}],
+            ['T', [.50, .295, f'{round(progress*100)}%'], {'font_size': 11, 'color': rgb(112, 89, 60)}],
+        ]
+        self.parser.parse(data, self.bounds)
+
+    def _start_first_loading(self):
+        self.machine.start_loading()
+        if self._loading_started:
+            return
+        self._loading_started = True
+        threading.Thread(target=self._prepare_first_journey, name='canal-loader', daemon=True).start()
+
+    def _prepare_first_journey(self):
+        self._loading_target = .16
+        self.effects.prepare()
+        self._loading_target = .38
+        self.music.prepare()
+        self._loading_target = 1.0
+        self._loading_complete = True
 
     def draw_map(self):
         """绘制地图"""
@@ -623,6 +665,7 @@ class App:
         accelerated = self.engine.mode_name == 'accelerated'
         acceleration_available = self.engine.supports_acceleration
         toggle_hover = self.hovered_item == ('acceleration', 0) and acceleration_available
+        audio_hover = self.hovered_item == ('audio_enabled', 0)
         data = [
             ['T', [.50, .865, '设置'], {'font_size': 30, 'font_weight': 'bold', 'color': rgb(67, 54, 42)}],
             ['T', [.50, .820, '画面与声音'], {'font_size': 11, 'color': rgb(137, 113, 79)}],
@@ -643,10 +686,17 @@ class App:
             }],
             ['L', [[.24,.555+pulse],[.76,.555+pulse]], {'stroke': rgb(213, 193, 153), 'stroke_width': 1}],
             ['T', [.255, .510 + pulse, '音量'], {'font_size': 17, 'font_weight': 'bold', 'align': 'left', 'color': rgb(73, 60, 46)}],
+            ['T', [.545, .510 + pulse, '音频'], {'font_size': 11, 'align': 'left', 'color': rgb(91, 74, 55)}],
+            ['RR', [.655, .484 + pulse, .095, .046, .023], {
+                'fill': rgb(54, 142, 104) if self.audio_enabled else rgb(190, 183, 165),
+                'stroke': rgb(35, 112, 81) if audio_hover else rgb(151, 135, 106),
+                'stroke_width': 2 if audio_hover else 1,
+            }],
+            ['C', [.721 if self.audio_enabled else .684, .507 + pulse, .017], {'fill': rgb(255, 250, 233)}],
         ]
 
         for label, value, y, key in (
-            ('主音量', self.master_volume, .435, 'master_volume'),
+            ('音乐音量', self.master_volume, .435, 'master_volume'),
             ('音效', self.effects_volume, .335, 'effects_volume'),
         ):
             hovered = self.hovered_item == (key, 0)
@@ -671,7 +721,7 @@ class App:
         data.extend([
             ['T', [.50, .272 + pulse, status], {'font_size': 10, 'color': rgb(119, 97, 70)}],
             ['T', [.50, .243 + pulse, audio_status], {'font_size': 9, 'color': rgb(156, 137, 106)}],
-            ['T', [.50, .217 + pulse, '交互音效接口预留'], {'font_size': 8, 'color': rgb(171, 151, 119)}],
+            ['T', [.50, .217 + pulse, '音乐与交互音效均由代码实时演奏'], {'font_size': 8, 'color': rgb(171, 151, 119)}],
         ])
         self.parser.parse(data, self.bounds)
 
@@ -739,6 +789,7 @@ class App:
         """绘制状态提示"""
         mode_names = {
             Mode.INTRO: '开场',
+            Mode.LOADING: '加载',
             Mode.MAP: '地图',
             Mode.CITY: '城市',
             Mode.FOOD_DETAIL: '详情',
@@ -782,7 +833,7 @@ class App:
 
         if self.state.mode == Mode.INTRO:
             self.effects.play('key')
-            self.begin_transition(self.machine.start_journey)
+            self.begin_transition(self._start_first_loading)
         elif self.state.mode == Mode.MAP:
             if self.state.is_all_stamped():
                 self.begin_transition(self.machine.go_to_finale)
@@ -810,6 +861,7 @@ class App:
         elif self.state.mode == Mode.FINALE:
             self.begin_transition(self.machine.return_from_finale)
         elif self.state.mode != Mode.INTRO:
+            self.effects.play('scroll' if self.state.mode in (Mode.ATLAS, Mode.FOOD_DETAIL) else 'key')
             self.begin_transition(self.machine.back)
         self.render()
 
@@ -862,6 +914,15 @@ class App:
         if was_transitioning and not self.transition.active:
             self.state.transition_locked = False
 
+        if self.state.mode == Mode.LOADING:
+            ceiling = self._loading_target if self._loading_complete else min(self._loading_target + .42, .92)
+            self._loading_progress += (ceiling - self._loading_progress) * min(1., delta_seconds * 2.6)
+            if self._loading_complete and self._loading_progress >= .985 and not self._loading_finished_transition:
+                self._loading_finished_transition = True
+                if self.audio_enabled:
+                    self.music.start()
+                self.begin_transition(self.machine.finish_loading)
+
         if self.state.mode == Mode.MAP:
             moved = self.boat.step(self.move_direction, delta_seconds)
             self.splash.step(delta_seconds)
@@ -895,8 +956,10 @@ class App:
         if self.state.transition_locked or self.state.help_open:
             return
         if self.state.mode == Mode.MAP:
+            self.effects.play('scroll')
             self.begin_transition(self.machine.open_atlas)
         elif self.state.mode == Mode.ATLAS:
+            self.effects.play('scroll')
             self.begin_transition(self.machine.back)
         self.render()
 
@@ -919,6 +982,11 @@ class App:
         else:
             self.effects_volume = value
             self.effects.set_volume(value)
+
+    def _toggle_audio(self):
+        self.audio_enabled = not self.audio_enabled
+        self.music.set_enabled(self.audio_enabled)
+        self.effects.set_enabled(self.audio_enabled)
 
     def on_motion(self, x, y):
         """Update semantic hover state without redrawing for every pixel."""
@@ -962,7 +1030,9 @@ class App:
             elif .67 <= nx <= .81 and .09 <= ny <= .17 and self.state.atlas_page < 5:
                 hovered = ('atlas_nav', 1)
         elif not self.state.help_open and self.state.mode == Mode.SETTINGS:
-            if (.64 <= nx <= .77 and .60 <= ny <= .69
+            if .64 <= nx <= .77 and .47 <= ny <= .54:
+                hovered = ('audio_enabled', 0)
+            elif (.64 <= nx <= .77 and .60 <= ny <= .69
                     and self.engine.supports_acceleration):
                 hovered = ('acceleration', 0)
             elif .40 <= nx <= .75 and .40 <= ny <= .48:
@@ -985,20 +1055,20 @@ class App:
             self.render()
             return
 
-        # A restrained key tap accompanies ordinary controls; richer actions
-        # below add their contextual scroll/page/stamp sound as well.
-        self.effects.play('key')
         nx, ny = x / CANVAS_WIDTH, y / CANVAS_HEIGHT
-        if self.state.mode != Mode.INTRO and .045 <= nx <= .17 and .86 <= ny <= .95:
+        if self.state.can_go_back() and .045 <= nx <= .17 and .86 <= ny <= .95:
+            self.effects.play('scroll' if self.state.mode in (Mode.ATLAS, Mode.FOOD_DETAIL) else 'key')
             if self.state.mode == Mode.FINALE:
                 self.begin_transition(self.machine.return_from_finale)
             else:
                 self.begin_transition(self.machine.back)
         elif self.state.mode == Mode.INTRO:
             if .35 <= nx <= .65 and .14 <= ny <= .26:
-                self.begin_transition(self.machine.start_journey)
+                self.effects.play('key')
+                self.begin_transition(self._start_first_loading)
         elif self.state.mode == Mode.MAP:
             if .825 <= nx <= .955 and .85 <= ny <= .94:
+                self.effects.play('key')
                 self.begin_transition(self.machine.open_settings)
             elif .04 <= nx <= .21 and .05 <= ny <= .17:
                 self.effects.play('scroll')
@@ -1012,8 +1082,10 @@ class App:
                     self.effects.play('fresh')
                     self.begin_transition(self.machine.enter_city)
                 elif .045 <= nx <= .14 and .37 <= ny <= .51:
+                    self.effects.play('key')
                     self.boat.nudge(-1)
                 elif .86 <= nx <= .955 and .37 <= ny <= .51:
+                    self.effects.play('key')
                     self.boat.nudge(1)
         elif self.state.mode == Mode.CITY:
             city_id = get_city(self.state.current_city)['id']
@@ -1033,7 +1105,11 @@ class App:
             elif .67 <= nx <= .81 and .09 <= ny <= .17:
                 self._turn_atlas(1)
         elif self.state.mode == Mode.SETTINGS:
-            if .64 <= nx <= .77 and .60 <= ny <= .69:
+            if .64 <= nx <= .77 and .47 <= ny <= .54:
+                self.effects.play('key')
+                self._toggle_audio()
+            elif .64 <= nx <= .77 and .60 <= ny <= .69:
+                self.effects.play('key')
                 self._toggle_acceleration()
             elif .40 <= nx <= .75 and .40 <= ny <= .48:
                 self._set_volume('master_volume', nx)
