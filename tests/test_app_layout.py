@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 
 from canal_delights.app import App
-from canal_delights.state import AppState, Mode
+from canal_delights.state import AppState, Mode, StateMachine
 
 
 def test_preview_height_tracks_wrapped_description():
@@ -70,3 +70,13 @@ def test_click_sound_only_fires_for_a_real_hit_target():
 
     app.on_click(100, 80)  # visible atlas-book button
     assert calls == ['scroll']
+
+
+def test_completed_first_load_is_never_entered_again():
+    app = object.__new__(App)
+    app.state = AppState(mode=Mode.INTRO)
+    app.machine = StateMachine(app.state)
+    app._loading_complete = True
+
+    app._enter_journey()
+    assert app.state.mode is Mode.MAP

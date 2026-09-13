@@ -54,6 +54,7 @@ class App:
         self._loading_target = 0.0
         self._loading_complete = False
         self._loading_finished_transition = False
+        self._loading_label = '正在加载……'
 
     def run(self):
         """运行应用"""
@@ -268,7 +269,7 @@ class App:
         progress = max(0., min(1., self._loading_progress))
         data = [
             ['T', [.50, .68, '正在展开运河长卷'], {'font_size': 27, 'font_weight': 'bold', 'color': rgb(73, 60, 46)}],
-            ['T', [.50, .625, '调弦 · 润色 · 汇入清波'], {'font_size': 11, 'color': rgb(139, 109, 72)}],
+            ['T', [.50, .625, self._loading_label], {'font_size': 11, 'color': rgb(139, 109, 72)}],
             ['B', [[.17,.46],[.27,.49+wave_x*.10],[.39,.45-wave_x*.08],[.50,.46]], {
                 'stroke': rgb(89, 154, 161), 'stroke_width': 5,
             }],
@@ -288,13 +289,31 @@ class App:
         self._loading_started = True
         threading.Thread(target=self._prepare_first_journey, name='canal-loader', daemon=True).start()
 
+    def _enter_journey(self):
+        """Route later visits directly to the map after the one-time preload."""
+        if self._loading_complete:
+            self.machine.start_journey()
+        else:
+            self._start_first_loading()
+
     def _prepare_first_journey(self):
-        self._loading_target = .16
-        self.effects.prepare()
-        self._loading_target = .38
-        self.music.prepare()
-        self._loading_target = 1.0
-        self._loading_complete = True
+        try:
+            self._loading_label = '正在加载交互音效……'
+            self._loading_target = .16
+            self.effects.prepare()
+            self._loading_label = '正在加载清新风背景音乐……'
+            self._loading_target = .38
+            self.music.prepare()
+            self._loading_label = '正在完成首次初始化……'
+        except Exception:
+            # Audio availability must never strand the user on the loader.
+            self.audio_enabled = False
+            self.music.set_enabled(False)
+            self.effects.set_enabled(False)
+            self._loading_label = '音频初始化不可用，正在以静音模式进入……'
+        finally:
+            self._loading_target = 1.0
+            self._loading_complete = True
 
     def draw_map(self):
         """绘制地图"""
@@ -833,7 +852,7 @@ class App:
 
         if self.state.mode == Mode.INTRO:
             self.effects.play('key')
-            self.begin_transition(self._start_first_loading)
+            self.begin_transition(self._enter_journey)
         elif self.state.mode == Mode.MAP:
             if self.state.is_all_stamped():
                 self.begin_transition(self.machine.go_to_finale)
@@ -1065,7 +1084,7 @@ class App:
         elif self.state.mode == Mode.INTRO:
             if .35 <= nx <= .65 and .14 <= ny <= .26:
                 self.effects.play('key')
-                self.begin_transition(self._start_first_loading)
+                self.begin_transition(self._enter_journey)
         elif self.state.mode == Mode.MAP:
             if .825 <= nx <= .955 and .85 <= ny <= .94:
                 self.effects.play('key')
