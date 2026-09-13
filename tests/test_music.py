@@ -50,3 +50,11 @@ def test_score_position_is_derived_from_absolute_clock_time():
     looped = looped_score_position(66.25, duration=65.25, bpm=120)
     assert looped.cycle == 1
     assert looped.bar == 0 and looped.beat == 2
+
+
+def test_player_prepare_prefers_embedded_bgm_over_synth_fallback():
+    from canal_delights.core.music import BGM_WAV_ZLIB_BASE64, ScorePlayer
+    player = ScorePlayer(sound_module=False)
+    player.prepare()
+    assert BGM_WAV_ZLIB_BASE64
+    assert len(player._suite_cache) > 10_000_000

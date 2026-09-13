@@ -249,8 +249,6 @@ class ScorePlayer:
         return render_canal_suite(volume=self.volume)
     def prepare(self):
         self._suite_cache = self._suite_cache or self._load_payload()
-    def prepare(self):
-        if self._suite_cache is None:self._suite_cache=render_canal_suite(volume=self.volume)
     def set_enabled(self,enabled):
         self.enabled=bool(enabled)
         if not self.enabled:self.stop()
