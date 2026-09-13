@@ -210,21 +210,15 @@ class ScorePlayer:
             params,frames=_wav_timeline(payload)
             duration=len(frames)/(params.framerate*params.nchannels*params.sampwidth)
             origin=time.monotonic()
-            # At 120 BPM this is an eighth note. It divides the full 65.25 s
-            # render exactly and keeps normal window boundaries continuous.
-            window_seconds=.25
+            # Feed the complete decoded PCM to the system in one call. Rebuilding
+            # 0.25 s WAV windows made Python the real-time producer and caused
+            # audible starvation under load. The audio device now owns timing.
             while not self._stop_event.is_set():
                 elapsed=time.monotonic()-origin
-                quantized_elapsed=math.floor(elapsed/window_seconds)*window_seconds
-                # Recompute from the system clock every window. A delayed call
-                # therefore jumps forward instead of stretching later bars.
-                self.current_position=looped_score_position(quantized_elapsed,duration)
+                self.current_position=looped_score_position(elapsed,duration)
                 timeline_seconds=self.current_position.seconds
-                self._buffer=_wav_window(params,frames,timeline_seconds,window_seconds)
-                call_started=time.monotonic()
-                self.sound.PlaySound(self._buffer,self.sound.SND_MEMORY)
-                remaining=window_seconds-(time.monotonic()-call_started)
-                if remaining>0:self._stop_event.wait(remaining)
+                self._buffer=payload
+                self.sound.PlaySound(payload,self.sound.SND_MEMORY)
         except RuntimeError: pass
         finally: self.playing=False
     def start(self):
