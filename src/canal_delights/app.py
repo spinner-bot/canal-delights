@@ -41,6 +41,9 @@ class App:
         self.transition = SceneTransition()
         self.move_direction = 0
         self.animation_phase = 0.0
+        self._fps = 0.0
+        self._fps_elapsed = 0.0
+        self._fps_frames = 0
         self._splash_elapsed = 0.0
         self._pressed_nav = None
         self.book_turn = 0.0
@@ -886,6 +889,7 @@ class App:
         mode_name = mode_names.get(self.state.mode, '未知')
         data = [
             ['T', [0.95, 0.05, f'[{mode_name}]'], {'font_size': 10, 'color': rgb(180, 180, 180), 'align': 'right'}],
+            ['T', [0.95, 0.085, f'FPS：{round(self._fps):02d}'], {'font_size': 9, 'color': rgb(180, 180, 180), 'align': 'right'}],
         ]
         self.parser.parse(data, self.bounds)
 
@@ -1009,6 +1013,15 @@ class App:
 
     def on_animation_frame(self, delta_seconds):
         """Drive restrained vector motion, boat physics and transitions."""
+        # Measure delivered animation frames over a short rolling window so
+        # the indicator reflects real rendering performance rather than the
+        # configured target FPS.
+        self._fps_elapsed += max(0.0, delta_seconds)
+        self._fps_frames += 1
+        if self._fps_elapsed >= .25:
+            self._fps = self._fps_frames / self._fps_elapsed
+            self._fps_elapsed = 0.0
+            self._fps_frames = 0
         self.animation_phase += delta_seconds
         was_transitioning = self.transition.active
         self.transition.step(delta_seconds)
