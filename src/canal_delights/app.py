@@ -4,6 +4,7 @@
 
 import math
 import threading
+from time import perf_counter
 
 from .state import AppState, StateMachine, Mode
 from .core.backend import RenderMode, create_engine
@@ -44,6 +45,7 @@ class App:
         self._fps = 0.0
         self._fps_elapsed = 0.0
         self._fps_frames = 0
+        self._fps_last_time = None
         self._splash_elapsed = 0.0
         self._pressed_nav = None
         self.book_turn = 0.0
@@ -1018,7 +1020,10 @@ class App:
         # Measure delivered animation frames over a short rolling window so
         # the indicator reflects real rendering performance rather than the
         # configured target FPS.
-        self._fps_elapsed += max(0.0, delta_seconds)
+        now = perf_counter()
+        measured_delta = (now - self._fps_last_time) if self._fps_last_time is not None else 0.0
+        self._fps_last_time = now
+        self._fps_elapsed += max(0.0, measured_delta)
         self._fps_frames += 1
         if self._fps_elapsed >= .25:
             self._fps = self._fps_frames / self._fps_elapsed
