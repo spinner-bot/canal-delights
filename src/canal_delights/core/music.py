@@ -6,7 +6,12 @@ import ctypes
 import io, math, random, sys, threading, time, wave
 import multiprocessing
 from .audio_codec import decode_wav
-from .embedded_bgm import BGM_WAV_ZLIB_BASE64
+try:
+    from .embedded_bgm import BGM_WAV_ZLIB_BASE64
+except ImportError:
+    # The compact single-file build intentionally omits the large WAV asset;
+    # it supplies the MP3 resource below instead.
+    BGM_WAV_ZLIB_BASE64 = ''
 try:
     from .embedded_mp3 import BGM_MP3_BASE64
 except ImportError:

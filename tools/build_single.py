@@ -10,14 +10,20 @@ OUTPUT = ROOT / '拼装版' / '运河风物志（Canal delights）.py'
 
 def main() -> None:
     modules = {}
+    packages = set()
     for path in sorted((ROOT / 'src').rglob('*.py')):
         if path.name == 'embedded_bgm.py':
             continue
-        name = '.'.join(path.relative_to(ROOT / 'src').with_suffix('').parts)
+        parts = list(path.relative_to(ROOT / 'src').with_suffix('').parts)
+        if parts[-1] == '__init__':
+            parts.pop()
+            packages.add('.'.join(parts))
+        name = '.'.join(parts)
         modules[name] = path.read_text(encoding='utf-8')
     modules['canal_delights.core.embedded_mp3'] = 'BGM_MP3_BASE64 = __canal_audio_payload__\n'
     mp3 = base64.b64encode((ROOT / 'resource' / 'BGM_preview_48k.mp3').read_bytes()).decode('ascii')
     source_modules = repr(modules)
+    source_packages = repr(sorted(packages))
     audio_chunks = '\n'.join(f'    {mp3[i:i + 4096]!r}' for i in range(0, len(mp3), 4096))
     source = f'''"""Canal Delights 单文件发行版（源码明文拼装，音频压缩存储）。"""
 
@@ -27,6 +33,7 @@ import sys
 import base64
 
 _MODULE_SOURCES = {source_modules}
+_PACKAGES = {source_packages}
 
 
 class _SourceLoader(importlib.abc.Loader):
@@ -43,7 +50,7 @@ class _SourceFinder(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):
         if fullname not in _MODULE_SOURCES:
             return None
-        package = fullname + '.__init__' in _MODULE_SOURCES
+        package = fullname in _PACKAGES
         return importlib.util.spec_from_loader(fullname, _SourceLoader(), is_package=package)
 
 
