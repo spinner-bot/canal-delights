@@ -705,8 +705,8 @@ class App:
                 'fill': rgb(255, 250, 233) if acceleration_available else rgb(216, 208, 189),
             }],
             ['L', [[.24,.555+pulse],[.76,.555+pulse]], {'stroke': rgb(213, 193, 153), 'stroke_width': 1}],
-            ['T', [.255, .510 + pulse, '音量'], {'font_size': 17, 'font_weight': 'bold', 'align': 'left', 'color': rgb(73, 60, 46)}],
-            ['T', [.545, .510 + pulse, '音频'], {'font_size': 11, 'align': 'left', 'color': rgb(91, 74, 55)}],
+            ['T', [.255, .510 + pulse, '音频设置'], {'font_size': 17, 'font_weight': 'bold', 'align': 'left', 'color': rgb(73, 60, 46)}],
+            ['T', [.545, .510 + pulse, '总开关'], {'font_size': 11, 'align': 'left', 'color': rgb(91, 74, 55)}],
             ['RR', [.655, .484 + pulse, .095, .046, .023], {
                 'fill': rgb(54, 142, 104) if self.audio_enabled else rgb(190, 183, 165),
                 'stroke': rgb(35, 112, 81) if audio_hover else rgb(151, 135, 106),

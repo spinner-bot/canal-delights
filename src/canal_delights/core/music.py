@@ -4,8 +4,16 @@ from array import array
 from dataclasses import dataclass
 import ctypes
 import io, math, random, sys, threading, time, wave
+import multiprocessing
 from .audio_codec import decode_wav
 from .embedded_bgm import BGM_WAV_ZLIB_BASE64
+
+
+def _audio_process_main(payload):
+    """Own the blocking Windows call so the parent can terminate playback."""
+    import winsound
+    while True:
+        winsound.PlaySound(payload, winsound.SND_MEMORY)
 
 SAMPLE_RATE, DEFAULT_BPM, FULL_SCALE = 11025, 120, 32767
 
@@ -201,7 +209,7 @@ class ScorePlayer:
         if sound_module is None:
             try: import winsound as sound_module
             except ImportError: sound_module=None
-        self.sound=sound_module; self.volume=max(0.,min(1.,volume)); self.enabled=True; self.playing=False; self.current_position=ScorePosition(0,0.,0.); self._buffer=None; self._suite_cache=None; self._thread=None; self._stop_event=threading.Event()
+        self.sound=sound_module; self.volume=max(0.,min(1.,volume)); self.enabled=True; self.playing=False; self.current_position=ScorePosition(0,0.,0.); self._buffer=None; self._suite_cache=None; self._thread=None; self._process=None; self._stop_event=threading.Event()
     @property
     def available(self): return self.sound is not None
     @staticmethod
@@ -222,6 +230,17 @@ class ScorePlayer:
             params,frames=_wav_timeline(payload)
             duration=len(frames)/(params.framerate*params.nchannels*params.sampwidth)
             origin=time.monotonic()
+            if sys.platform == 'win32' and self.sound is not False:
+                context = multiprocessing.get_context('spawn')
+                self._process = context.Process(target=_audio_process_main, args=(payload,), daemon=True)
+                self._process.start()
+                while not self._stop_event.wait(.1):
+                    self.current_position=looped_score_position(time.monotonic()-origin,duration)
+                    if not self._process.is_alive(): break
+                if self._process.is_alive(): self._process.terminate()
+                self._process.join(timeout=1.)
+                self._process=None
+                return
             # Feed the complete decoded PCM to the system in one call. Rebuilding
             # 0.25 s WAV windows made Python the real-time producer and caused
             # audible starvation under load. The audio device now owns timing.
@@ -239,6 +258,10 @@ class ScorePlayer:
         self.playing=True; self._stop_event.clear(); self._thread=threading.Thread(target=self._perform_suite,name='canal-score-player',daemon=True); self._thread.start(); return True
     def stop(self):
         self._stop_event.set(); self.playing=False
+        if self._process and self._process.is_alive():
+            self._process.terminate()
+            self._process.join(timeout=1.)
+            self._process=None
         if self._thread and self._thread is not threading.current_thread(): self._thread.join(timeout=1.2)
         self._thread=None
     def set_volume(self,volume):
