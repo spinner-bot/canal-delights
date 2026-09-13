@@ -7,11 +7,31 @@ import io, math, random, sys, threading, time, wave
 import multiprocessing
 from .audio_codec import decode_wav
 from .embedded_bgm import BGM_WAV_ZLIB_BASE64
+try:
+    from .embedded_mp3 import BGM_MP3_BASE64
+except ImportError:
+    BGM_MP3_BASE64 = ''
+import base64
 
 
-def _audio_process_main(payload):
+def _audio_process_main(payload, kind='wav'):
     """Own the blocking Windows call so the parent can terminate playback."""
     import winsound
+    if kind == 'mp3':
+        import tempfile
+        from pathlib import Path
+        path = Path(tempfile.gettempdir()) / 'canal_delights_bgm.mp3'
+        path.write_bytes(payload)
+        winmm = ctypes.WinDLL('winmm')
+        send = winmm.mciSendStringW
+        send(f'open "{path}" type mpegvideo alias canal_delights', None, 0, None)
+        send('play canal_delights repeat', None, 0, None)
+        try:
+            while True:
+                time.sleep(.25)
+        finally:
+            send('close canal_delights', None, 0, None)
+        return
     while True:
         winsound.PlaySound(payload, winsound.SND_MEMORY)
 
@@ -225,14 +245,22 @@ class ScorePlayer:
             pass
     def _perform_suite(self):
         try:
-            payload = self._suite_cache or self._load_payload()
+            kind = 'wav'
+            if BGM_MP3_BASE64:
+                payload = base64.b64decode(BGM_MP3_BASE64)
+                kind = 'mp3'
+            else:
+                payload = self._suite_cache or self._load_payload()
             self._suite_cache = payload
-            params,frames=_wav_timeline(payload)
-            duration=len(frames)/(params.framerate*params.nchannels*params.sampwidth)
+            if kind == 'wav':
+                params,frames=_wav_timeline(payload)
+                duration=len(frames)/(params.framerate*params.nchannels*params.sampwidth)
+            else:
+                duration=204.05
             origin=time.monotonic()
             if sys.platform == 'win32' and self.sound is not False:
                 context = multiprocessing.get_context('spawn')
-                self._process = context.Process(target=_audio_process_main, args=(payload,), daemon=True)
+                self._process = context.Process(target=_audio_process_main, args=(payload, kind), daemon=True)
                 self._process.start()
                 while not self._stop_event.wait(.1):
                     self.current_position=looped_score_position(time.monotonic()-origin,duration)

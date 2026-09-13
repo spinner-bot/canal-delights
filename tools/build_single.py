@@ -18,7 +18,16 @@ def make_archive() -> bytes:
     # directly so rebuilding the single-file distribution stays fast.
     with zipfile.ZipFile(stream, 'w', compression=zipfile.ZIP_STORED) as archive:
         for path in sorted((ROOT / 'src').rglob('*.py')):
+            if path.name == 'embedded_bgm.py':
+                continue
             archive.write(path, path.relative_to(ROOT / 'src').as_posix())
+        mp3 = (ROOT / 'resource' / 'BGM_preview_48k.mp3').read_bytes()
+        encoded = base64.b64encode(mp3).decode('ascii')
+        archive.writestr(
+            'canal_delights/core/embedded_mp3.py',
+            '"""Generated 48 kbps BGM resource."""\n\n'
+            'BGM_MP3_BASE64 = ' + repr(encoded) + '\n',
+        )
     return stream.getvalue()
 
 
