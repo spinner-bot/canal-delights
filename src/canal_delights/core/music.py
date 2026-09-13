@@ -2,6 +2,7 @@
 from __future__ import annotations
 from array import array
 from dataclasses import dataclass
+import ctypes
 import io, math, random, sys, threading, time, wave
 from .audio_codec import decode_wav
 from .embedded_bgm import BGM_WAV_ZLIB_BASE64
@@ -203,6 +204,17 @@ class ScorePlayer:
         self.sound=sound_module; self.volume=max(0.,min(1.,volume)); self.enabled=True; self.playing=False; self.current_position=ScorePosition(0,0.,0.); self._buffer=None; self._suite_cache=None; self._thread=None; self._stop_event=threading.Event()
     @property
     def available(self): return self.sound is not None
+    @staticmethod
+    def _set_output_volume(value):
+        """Apply live music gain without interrupting the contiguous PCM stream."""
+        if sys.platform != 'win32':
+            return
+        level = max(0., min(1., float(value)))
+        packed = int(level * 0xffff) | (int(level * 0xffff) << 16)
+        try:
+            ctypes.windll.winmm.waveOutSetVolume(0, packed)
+        except (AttributeError, OSError):
+            pass
     def _perform_suite(self):
         try:
             payload = self._suite_cache or self._load_payload()
@@ -233,6 +245,7 @@ class ScorePlayer:
         value=max(0.,min(1.,volume))
         if value != self.volume:self._suite_cache=None
         self.volume=value
+        if self.enabled:self._set_output_volume(value)
     def _load_payload(self):
         """Prefer the packaged composition; retain synthesis as dev fallback."""
         if BGM_WAV_ZLIB_BASE64:
@@ -245,5 +258,9 @@ class ScorePlayer:
         self._suite_cache = self._suite_cache or self._load_payload()
     def set_enabled(self,enabled):
         self.enabled=bool(enabled)
-        if not self.enabled:self.stop()
-        elif not self.playing:self.start()
+        if not self.enabled:
+            self._set_output_volume(0.)
+            self.stop()
+        else:
+            self._set_output_volume(self.volume)
+            if not self.playing:self.start()
