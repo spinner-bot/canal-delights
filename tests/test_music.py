@@ -2,7 +2,7 @@ import struct
 import wave
 from io import BytesIO
 
-from canal_delights.core.music import CANAL_SCORE, DEFAULT_BPM, FULL_SCALE, PROGRESSION, VOICES, note_frequency, render_canal_suite
+from canal_delights.core.music import CANAL_SCORE, DEFAULT_BPM, FULL_SCALE, NATURE_LAYERS, PROGRESSION, VOICES, note_frequency, render_canal_suite
 
 
 def _values(payload):
@@ -34,3 +34,5 @@ def test_effect_presets_and_voice_contracts_are_explicit():
     assert render_canal_suite(sample_rate=2000, reverb='room') != render_canal_suite(sample_rate=2000, reverb='hall')
     assert {'pluck', 'flute_fm', 'percussion'} <= {voice.timbre for voice in VOICES.values()}
     assert all(0 <= voice.pan <= 1 and voice.attack >= 0 and voice.release >= 0 for voice in VOICES.values())
+    assert set(NATURE_LAYERS) == {'stream', 'breeze', 'birds'}
+    assert max(NATURE_LAYERS.values()) < min(voice.volume for voice in VOICES.values())

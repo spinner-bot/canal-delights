@@ -19,12 +19,13 @@ class NoteEvent:
 
 # Five independent instruments: each owns timbre, gain and stereo position.
 VOICES = {
-    'melody': Voice('melody','pluck',.26,.66,.012,.10,.57,.15),
-    'flute': Voice('flute','flute_fm',.16,.31,.045,.12,.78,.22,5.2,.012),
-    'harmony': Voice('harmony','pad',.15,.47,.075,.22,.62,.28),
-    'bass': Voice('bass','bass',.22,.54,.016,.09,.68,.12),
-    'drums': Voice('drums','percussion',.12,.50,.003,.06,0.,.06),
+    'melody': Voice('melody','pluck',.20,.62,.018,.13,.52,.20),
+    'flute': Voice('flute','flute_fm',.12,.34,.070,.18,.76,.30,5.2,.009),
+    'harmony': Voice('harmony','pad',.115,.46,.14,.30,.58,.42),
+    'bass': Voice('bass','bass',.15,.54,.025,.13,.64,.18),
+    'drums': Voice('drums','percussion',.045,.52,.006,.05,0.,.08),
 }
+NATURE_LAYERS = {'stream': .010, 'breeze': .006, 'birds': .016}
 VELOCITIES = {'pp': .52, 'mf': .76, 'ff': 1.}
 # I – V7 – vi7 – IVmaj7, explicitly containing both triads and sevenths.
 PROGRESSION = (('D3','F#3','A3','C#4'), ('A2','C#3','E3','G3'),
@@ -81,13 +82,14 @@ def _envelope(t,d,v,art):
 
 def _tone(t,f,v,bright,seed,sr):
     phase=math.tau*f*t
-    if v.timbre=='pluck': return (math.sin(phase)+(.32+.18*bright)*math.sin(2*phase)+(.10+.10*bright)*math.sin(3*phase))/1.62
+    if v.timbre=='pluck': return (math.sin(phase)+(.16+.12*bright)*math.sin(2*phase)+(.04+.05*bright)*math.sin(3*phase))/1.35
     if v.timbre=='flute_fm':
         c=phase*(1+v.vibrato_depth*math.sin(math.tau*v.vibrato_hz*t))
-        return (math.sin(c+.72*math.sin(math.tau*2.1*t))+.18*math.sin(2*c)+.07*math.sin(3*c))/1.25
-    if v.timbre=='pad': return (math.sin(phase)+.42*math.sin(2*phase)+.19*math.sin(3*phase))/1.61
-    if v.timbre=='bass': return (math.sin(phase)+.24*math.sin(2*phase)+.08*math.sin(3*phase))/1.32
-    x=seed+int(t*sr); return .72*math.sin(x*12.9898)*math.sin(x*78.233)+.28*math.sin(math.tau*92*t)
+        return (math.sin(c+.18*math.sin(math.tau*2.1*t))+.10*math.sin(2*c)+.035*math.sin(3*c))/1.14
+    if v.timbre=='pad': return (math.sin(phase)+.17*math.sin(2*phase)+.045*math.sin(3*phase))/1.22
+    if v.timbre=='bass': return (math.sin(phase)+.12*math.sin(2*phase)+.025*math.sin(3*phase))/1.15
+    # A soft wooden pulse replaces the earlier noisy synthetic percussion.
+    return .72*math.sin(math.tau*510*t)*math.exp(-24*t)+.28*math.sin(math.tau*760*t)*math.exp(-32*t)
 
 def _add_event(left,right,event,bpm,sr,master,rng,seed):
     v=VOICES[event.voice]; beat=60/bpm; onset=round(event.start_beats*beat*sr)
@@ -110,12 +112,39 @@ def _effects(left,right,sr,preset):
         delay=round((.018+.003*math.sin(math.tau*.27*i/sr))*sr)
         if i>=delay: left[i]+=dl[i-delay]*.07; right[i]+=dr[i-delay]*.07
 
+def _add_nature(left, right, sr, master):
+    """Add a quiet, low-passed waterside bed and four sparse bird calls."""
+    state = 0xC0FFEE
+    breeze = water = slow_water = 0.
+    for i in range(len(left)):
+        state = (1664525 * state + 1013904223) & 0xffffffff
+        noise = state / 2147483648. - 1.
+        breeze += .0015 * (noise - breeze)
+        water += .040 * (noise - water)
+        slow_water += .009 * (noise - slow_water)
+        stream = (water - slow_water) * NATURE_LAYERS['stream'] * master
+        air = breeze * NATURE_LAYERS['breeze'] * master
+        drift = .72 + .28 * math.sin(math.tau * .075 * i / sr)
+        left[i] += stream * .92 + air * drift
+        right[i] += stream * 1.08 + air * (1.0 - .12 * drift)
+    for call, start in enumerate((7.4, 22.8, 40.6, 57.2)):
+        onset, duration = round(start * sr), round(.42 * sr)
+        pan = .22 if call % 2 == 0 else .78
+        for i in range(min(duration, len(left) - onset)):
+            t = i / sr
+            env = math.sin(math.pi * t / .42) ** 2
+            frequency = 1450 + 520 * t / .42 + 90 * math.sin(math.tau * 6.2 * t)
+            chirp = math.sin(math.tau * frequency * t) * env * NATURE_LAYERS['birds'] * master
+            left[onset+i] += chirp * math.sqrt(1-pan)
+            right[onset+i] += chirp * math.sqrt(pan)
+
 def render_canal_suite(bpm=DEFAULT_BPM,volume=.7,sample_rate=SAMPLE_RATE,reverb='hall') -> bytes:
-    """Render a 32-second stereo performance plus natural room tail to memory."""
+    """Render the fresh-light 64-second stereo suite and nature ambience."""
     if bpm<=0: raise ValueError('bpm must be positive')
     if reverb not in {'room','hall'}: raise ValueError("reverb must be 'room' or 'hall'")
     frames=round((128*60/bpm+1.25)*sample_rate); left,right=[0.]*frames,[0.]*frames; rng=random.Random(20260913)
     for seed,event in enumerate(CANAL_SCORE): _add_event(left,right,event,bpm,sample_rate,max(0.,min(1.,volume)),rng,seed)
+    _add_nature(left,right,sample_rate,max(0.,min(1.,volume)))
     _effects(left,right,sample_rate,reverb); peak=max(max(map(abs,left)),max(map(abs,right)),1e-9); gain=min(1.,.90/peak)
     pcm=array('h')
     for l,r in zip(left,right): pcm.extend((round(max(-.9,min(.9,l*gain))*FULL_SCALE),round(max(-.9,min(.9,r*gain))*FULL_SCALE)))
