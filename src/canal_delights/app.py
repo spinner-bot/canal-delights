@@ -12,6 +12,7 @@ from .core.navigation import (
     route_point, route_tangent,
 )
 from .core.splash import SplashSystem
+from .core.music import ScorePlayer
 from .core.renderer import DrawingDataParser
 from .config import linear_gradient, rgb, CANVAS_WIDTH, CANVAS_HEIGHT, CANVAS_BG
 from .content.catalog import get_all_cities, get_city, get_food
@@ -41,11 +42,14 @@ class App:
         self._splash_elapsed = 0.0
         self._pressed_nav = None
         self.book_turn = 0.0
+        self.master_volume = .72
+        self.effects_volume = .82
+        self.music = ScorePlayer(volume=self.master_volume)
 
     def run(self):
         """运行应用"""
         print("=" * 50)
-        print("  运河四季·美食绘卷")
+        print("  运河风物志 Canal Delights")
         print("=" * 50)
         print()
         print("操作说明:")
@@ -81,7 +85,11 @@ class App:
         self.engine.listen()
         self.render()
         self.animations.add(self.on_animation_frame)
-        self.engine.mainloop()
+        self.music.start()
+        try:
+            self.engine.mainloop()
+        finally:
+            self.music.stop()
 
     def render(self):
         """渲染当前帧"""
@@ -106,6 +114,8 @@ class App:
             self.draw_food_detail()
         elif self.state.mode == Mode.ATLAS:
             self.draw_atlas()
+        elif self.state.mode == Mode.SETTINGS:
+            self.draw_settings()
         elif self.state.mode == Mode.FINALE:
             self.draw_finale()
 
@@ -163,13 +173,15 @@ class App:
         return x <= nx <= x + width and y <= ny <= y + height
 
     def _preview_layout(self, city_index):
-        """Place a preview beside its marker, preferring the space above it."""
+        """Size to wrapped copy and place beside the associated marker."""
         marker_x, marker_y = CITY_POINTS[city_index]
-        width, height = .34, .19
+        lines = self._wrapped_lines(get_city(city_index)['description'], 18)
+        width = .38
+        height = .17 + .022 * len(lines)
         x = max(.045, min(.955 - width, marker_x - width / 2))
         above_y = marker_y + .075
         y = above_y if above_y + height <= .95 else marker_y - height - .075
-        button = (x + .225, y + .025, .090, .050)
+        button = (x + width - .115, y + .018, .090, .050)
         return x, y, width, height, button
 
     @staticmethod
@@ -225,8 +237,8 @@ class App:
             ['G', [[.23,.42+bob],[.28,.39+bob],[.23,.36+bob]], {'fill': rgb(201, 48, 44)}],
             ['B', [[.13,.278-bob],[.19,.265+bob],[.26,.27-bob],[.33,.275]], {'stroke': rgb(198, 222, 215), 'stroke_width': 2}],
             # 标题
-            ['T', [0.5, 0.6, '运河四季'], {'font_size': 48, 'color': rgb(139, 69, 19)}],
-            ['T', [0.5, 0.5, '美食绘卷'], {'font_size': 36, 'color': rgb(139, 69, 19)}],
+            ['T', [0.5, 0.59, '运河风物志'], {'font_size': 46, 'font_weight': 'bold', 'color': rgb(139, 69, 19)}],
+            ['T', [0.5, 0.515, 'Canal Delights'], {'font_size': 24, 'color': rgb(164, 121, 62)}],
             # 副标题
             ['T', [0.5, 0.35, '一河通南北，五味见四时'], {'font_size': 18, 'color': rgb(100, 100, 100)}],
             # 悬浮按钮
@@ -350,12 +362,48 @@ class App:
             ['T', [.092, .418, '‹'], {'font_size': 26, 'color': rgb(255, 248, 229) if left_hover else rgb(91, 63, 39)}],
             ['RR', [.87, .39, .075, .10, .025], {'fill': rgb(105, 57, 35) if right_pressed else (rgb(139, 69, 19) if right_hover else rgb(224, 207, 170)), 'stroke': rgb(164, 121, 62), 'stroke_width': 3 if right_pressed else 2}],
             ['T', [.907, .418, '›'], {'font_size': 26, 'color': rgb(255, 248, 229) if right_hover else rgb(91, 63, 39)}],
-            ['RR', [.81, .865, .135, .060, .018], {
-                'fill': rgb(139, 69, 19) if self.hovered_item == ('atlas', 0) else rgb(232, 218, 187),
+            ['RR', [.835, .865, .110, .060, .018], {
+                'fill': rgb(139, 69, 19) if self.hovered_item == ('settings', 0) else rgb(232, 218, 187),
                 'stroke': rgb(164, 121, 62), 'stroke_width': 1,
             }],
-            ['T', [.877, .883, '翻阅图鉴'], {'font_size': 11, 'font_weight': 'bold',
-                                            'color': rgb(255, 248, 229) if self.hovered_item == ('atlas', 0) else rgb(91, 63, 39)}],
+            ['T', [.890, .883, '设置'], {'font_size': 11, 'font_weight': 'bold',
+                                        'color': rgb(255, 248, 229) if self.hovered_item == ('settings', 0) else rgb(91, 63, 39)}],
+        ])
+
+        # A compact open-book silhouette: leather rim, layered pages, page
+        # rules and a cinnabar bookmark.  It floats instead of sitting inside
+        # another generic rectangular button.
+        atlas_hover = self.hovered_item == ('atlas', 0)
+        lift = (.008 if atlas_hover else 0) + .002 * math.sin(self.animation_phase * 1.6)
+        rim = rgb(221, 174, 83) if atlas_hover else rgb(166, 104, 55)
+        data.extend([
+            ['E', [.125, .055 + lift, .088, .014], {'fill': rgb(193, 175, 139)}],
+            ['G', [[.043,.072+lift],[.117,.061+lift],[.125,.071+lift],
+                   [.133,.061+lift],[.207,.072+lift],[.197,.169+lift],
+                   [.139,.159+lift],[.125,.148+lift],[.111,.159+lift],[.053,.169+lift]], {
+                'fill': rgb(119, 61, 43), 'stroke': rim, 'stroke_width': 3 if atlas_hover else 2,
+            }],
+            ['G', [[.054,.083+lift],[.119,.073+lift],[.119,.151+lift],
+                   [.110,.158+lift],[.063,.162+lift]], {
+                'fill': rgb(251, 241, 210), 'stroke': rgb(213, 180, 119), 'stroke_width': 1,
+            }],
+            ['G', [[.131,.073+lift],[.196,.083+lift],[.187,.162+lift],
+                   [.140,.158+lift],[.131,.151+lift]], {
+                'fill': rgb(247, 233, 195), 'stroke': rgb(213, 180, 119), 'stroke_width': 1,
+            }],
+            ['L', [[.125,.071+lift],[.125,.150+lift]], {'stroke': rgb(132, 84, 51), 'stroke_width': 2}],
+            ['G', [[.166,.156+lift],[.180,.158+lift],[.177,.105+lift],
+                   [.171,.112+lift],[.165,.104+lift]], {'fill': rgb(188, 50, 43)}],
+            ['L', [[.068,.137+lift],[.108,.132+lift]], {'stroke': rgb(210, 190, 151), 'stroke_width': 1}],
+            ['L', [[.066,.120+lift],[.108,.116+lift]], {'stroke': rgb(210, 190, 151), 'stroke_width': 1}],
+            ['L', [[.142,.132+lift],[.185,.137+lift]], {'stroke': rgb(207, 184, 143), 'stroke_width': 1}],
+            ['L', [[.142,.116+lift],[.184,.120+lift]], {'stroke': rgb(207, 184, 143), 'stroke_width': 1}],
+            ['RR', [.094, .078 + lift, .062, .030, .010], {
+                'fill': rgb(218, 177, 94) if atlas_hover else rgb(229, 203, 145),
+                'stroke': rgb(139, 69, 19), 'stroke_width': 1,
+            }],
+            ['T', [.125, .085 + lift, '图鉴'], {'font_size': 9, 'font_weight': 'bold',
+                                              'color': rgb(105, 57, 35)}],
         ])
 
         if nearby_city is not None:
@@ -373,21 +421,22 @@ class App:
             ])
             # A lightweight animated silhouette avoids scaling full-scene
             # gradients, which would be expensive in pure Turtle mode.
-            thumb_x, thumb_y = card_x + .075, card_y + .105
+            thumb_x, thumb_y = card_x + .075, card_y + card_h / 2
             data.append(['GR', self._city_thumbnail(
                 city_data['id'], thumb_x, thumb_y, city_data['theme'], self.animation_phase,
             ), {'z': 101}])
+            copy_x = card_x + .145
+            top = card_y + card_h
             data.extend([
-                ['T', [card_x + .145, card_y + .145, city_data['name']], {'font_size': 17, 'font_weight': 'bold', 'align': 'left', 'color': rgb(55, 48, 39), 'z': 102}],
-                ['T', [card_x + .145, card_y + .112, city_data['cuisine']], {'font_size': 9, 'align': 'left', 'color': city_data['theme'], 'z': 102}],
-                ['T', [card_x + .145, card_y + .085, city_data['description'][:23] + '…'], {'font_size': 8, 'align': 'left', 'color': rgb(120, 105, 83), 'z': 102}],
+                ['T', [copy_x, top - .045, city_data['name']], {'font_size': 17, 'font_weight': 'bold', 'align': 'left', 'color': rgb(55, 48, 39), 'z': 102}],
+                ['T', [copy_x, top - .078, city_data['cuisine']], {'font_size': 9, 'align': 'left', 'color': city_data['theme'], 'z': 102}],
                 ['RR', [*explore_bounds, .014], {'fill': city_data['theme'] if explore_hover else rgb(219, 190, 130), 'stroke': city_data['theme'], 'stroke_width': 1, 'z': 102}],
                 ['T', [explore_bounds[0] + explore_bounds[2] / 2, explore_bounds[1] + .013, '探索'], {'font_size': 10, 'font_weight': 'bold', 'color': rgb(255, 250, 235) if explore_hover else rgb(75, 54, 35), 'z': 103}],
             ])
-
-        # Progress
-        progress = f"已游览: {len(self.state.visited_cities)}/5  已盖章: {len(self.state.stamped_cities)}/5"
-        data.append(['T', [0.5, 0.075, progress], {'font_size': 12, 'color': rgb(100, 100, 100)}])
+            for line_index, line in enumerate(self._wrapped_lines(city_data['description'], 18)):
+                data.append(['T', [copy_x, top - .108 - line_index * .022, line], {
+                    'font_size': 8, 'align': 'left', 'color': rgb(120, 105, 83), 'z': 102,
+                }])
 
         self.parser.parse(data, self.bounds)
 
@@ -565,6 +614,64 @@ class App:
             }])
         self.parser.parse(data, self.bounds)
 
+    def draw_settings(self):
+        """绘制设置页；音量值可调，音频播放接口留待资源接入。"""
+        pulse = .006 * math.sin(self.animation_phase * 1.8)
+        accelerated = self.engine.mode_name == 'accelerated'
+        acceleration_available = self.engine.supports_acceleration
+        toggle_hover = self.hovered_item == ('acceleration', 0) and acceleration_available
+        data = [
+            ['T', [.50, .865, '设置'], {'font_size': 30, 'font_weight': 'bold', 'color': rgb(67, 54, 42)}],
+            ['T', [.50, .820, '画面与声音'], {'font_size': 11, 'color': rgb(137, 113, 79)}],
+            ['E', [.50, .185, .315, .025], {'fill': rgb(201, 185, 151)}],
+            ['RR', [.19, .20 + pulse, .62, .56, .032], {
+                'fill': rgb(247, 238, 211), 'stroke': rgb(173, 126, 67), 'stroke_width': 2,
+            }],
+            ['T', [.255, .675 + pulse, '渲染性能'], {'font_size': 17, 'font_weight': 'bold', 'align': 'left', 'color': rgb(73, 60, 46)}],
+            ['T', [.255, .632 + pulse, '加速模式'], {'font_size': 14, 'align': 'left', 'color': rgb(82, 68, 52)}],
+            ['T', [.255, .598 + pulse, '关闭后使用纯 Turtle 绘制，帧率会相应降低'], {'font_size': 9, 'align': 'left', 'color': rgb(135, 117, 91)}],
+            ['RR', [.655, .617 + pulse, .095, .052, .026], {
+                'fill': rgb(54, 142, 104) if accelerated else rgb(190, 183, 165),
+                'stroke': rgb(35, 112, 81) if toggle_hover else rgb(151, 135, 106),
+                'stroke_width': 3 if toggle_hover else 1,
+            }],
+            ['C', [.722 if accelerated else .682, .643 + pulse, .020], {
+                'fill': rgb(255, 250, 233) if acceleration_available else rgb(216, 208, 189),
+            }],
+            ['L', [[.24,.555+pulse],[.76,.555+pulse]], {'stroke': rgb(213, 193, 153), 'stroke_width': 1}],
+            ['T', [.255, .510 + pulse, '音量'], {'font_size': 17, 'font_weight': 'bold', 'align': 'left', 'color': rgb(73, 60, 46)}],
+        ]
+
+        for label, value, y, key in (
+            ('主音量', self.master_volume, .435, 'master_volume'),
+            ('音效', self.effects_volume, .335, 'effects_volume'),
+        ):
+            hovered = self.hovered_item == (key, 0)
+            knob_x = .43 + .30 * value
+            data.extend([
+                ['T', [.255, y + .004 + pulse, label], {'font_size': 12, 'align': 'left', 'color': rgb(91, 74, 55)}],
+                ['RR', [.43, y + pulse, .30, .012, .006], {'fill': rgb(211, 200, 174)}],
+                ['RR', [.43, y + pulse, .30 * value, .012, .006], {'fill': rgb(173, 126, 67)}],
+                ['C', [knob_x, y + .006 + pulse, .015 if hovered else .012], {
+                    'fill': rgb(139, 69, 19) if hovered else rgb(181, 129, 65),
+                    'stroke': rgb(255, 246, 220), 'stroke_width': 2,
+                }],
+                ['T', [.765, y + .001 + pulse, f'{round(value * 100)}%'], {
+                    'font_size': 10, 'align': 'right', 'color': rgb(118, 98, 72),
+                }],
+            ])
+        status = '已启用 Canvas 批量渲染' if accelerated else '当前使用纯 Turtle 渲染'
+        if not acceleration_available:
+            status += '（命令行兼容模式）'
+        audio_status = ('曲谱由程序实时合成 · 不依赖外部音频文件'
+                        if self.music.available else '当前平台无系统音频接口 · 已静默运行')
+        data.extend([
+            ['T', [.50, .265 + pulse, status], {'font_size': 10, 'color': rgb(119, 97, 70)}],
+            ['T', [.50, .230 + pulse, audio_status], {'font_size': 9, 'color': rgb(156, 137, 106)}],
+            ['T', [.50, .205 + pulse, '交互音效接口预留'], {'font_size': 8, 'color': rgb(171, 151, 119)}],
+        ])
+        self.parser.parse(data, self.bounds)
+
     def draw_back_button(self):
         """Global back affordance shared by every non-intro scene."""
         hovered = self.hovered_item == ('back', 0)
@@ -633,6 +740,7 @@ class App:
             Mode.CITY: '城市',
             Mode.FOOD_DETAIL: '详情',
             Mode.ATLAS: '图鉴',
+            Mode.SETTINGS: '设置',
             Mode.FINALE: '终章',
         }
         mode_name = mode_names.get(self.state.mode, '未知')
@@ -781,6 +889,25 @@ class App:
             self.begin_transition(self.machine.back)
         self.render()
 
+    def _toggle_acceleration(self):
+        """Switch renderer implementation while preserving application state."""
+        if not self.engine.supports_acceleration:
+            return
+        self.engine.set_acceleration(self.engine.mode_name != 'accelerated')
+        self._background_rendered = False
+        accelerated = self.engine.mode_name == 'accelerated'
+        self.animations.set_fps(30 if accelerated else 10)
+        self.splash.limit = 36 if accelerated else 10
+        self.splash.drops = self.splash.drops[-self.splash.limit:]
+
+    def _set_volume(self, setting, nx):
+        value = max(0.0, min(1.0, (nx - .43) / .30))
+        if setting == 'master_volume':
+            self.master_volume = value
+            self.music.set_volume(value)
+        else:
+            self.effects_volume = value
+
     def on_motion(self, x, y):
         """Update semantic hover state without redrawing for every pixel."""
         nx, ny = x / CANVAS_WIDTH, y / CANVAS_HEIGHT
@@ -794,17 +921,20 @@ class App:
             if .35 <= nx <= .65 and .14 <= ny <= .26:
                 hovered = ('start', 0)
         elif not self.state.help_open and self.state.mode == Mode.MAP:
-            if .80 <= nx <= .955 and .85 <= ny <= .94:
+            if .825 <= nx <= .955 and .85 <= ny <= .94:
+                hovered = ('settings', 0)
+            elif .04 <= nx <= .21 and .05 <= ny <= .17:
                 hovered = ('atlas', 0)
-            elif .045 <= nx <= .14 and .37 <= ny <= .51:
-                hovered = ('nav', -1)
-            elif .86 <= nx <= .955 and .37 <= ny <= .51:
-                hovered = ('nav', 1)
-            elif self.boat.nearby_city() is not None:
+            else:
                 nearby = self.boat.nearby_city()
-                *_, explore_bounds = self._preview_layout(nearby)
-                if self._inside(nx, ny, explore_bounds):
+                if nearby is not None and self._inside(
+                    nx, ny, self._preview_layout(nearby)[-1],
+                ):
                     hovered = ('explore', nearby)
+                elif .045 <= nx <= .14 and .37 <= ny <= .51:
+                    hovered = ('nav', -1)
+                elif .86 <= nx <= .955 and .37 <= ny <= .51:
+                    hovered = ('nav', 1)
         elif not self.state.help_open and self.state.mode == Mode.CITY:
             city_id = get_city(self.state.current_city)['id']
             for index, (px, py) in enumerate(FOOD_POSITIONS[city_id]):
@@ -819,6 +949,14 @@ class App:
                 hovered = ('atlas_nav', -1)
             elif .67 <= nx <= .81 and .09 <= ny <= .17 and self.state.atlas_page < 5:
                 hovered = ('atlas_nav', 1)
+        elif not self.state.help_open and self.state.mode == Mode.SETTINGS:
+            if (.64 <= nx <= .77 and .60 <= ny <= .69
+                    and self.engine.supports_acceleration):
+                hovered = ('acceleration', 0)
+            elif .40 <= nx <= .75 and .40 <= ny <= .48:
+                hovered = ('master_volume', 0)
+            elif .40 <= nx <= .75 and .30 <= ny <= .38:
+                hovered = ('effects_volume', 0)
 
         self.engine.set_cursor('hand2' if hovered is not None else '')
         if hovered != self.hovered_item:
@@ -844,18 +982,21 @@ class App:
             if .35 <= nx <= .65 and .14 <= ny <= .26:
                 self.begin_transition(self.machine.start_journey)
         elif self.state.mode == Mode.MAP:
-            if .80 <= nx <= .955 and .85 <= ny <= .94:
+            if .825 <= nx <= .955 and .85 <= ny <= .94:
+                self.begin_transition(self.machine.open_settings)
+            elif .04 <= nx <= .21 and .05 <= ny <= .17:
                 self.begin_transition(self.machine.open_atlas)
-            elif .045 <= nx <= .14 and .37 <= ny <= .51:
-                self.boat.nudge(-1)
-            elif .86 <= nx <= .955 and .37 <= ny <= .51:
-                self.boat.nudge(1)
-            elif self.boat.nearby_city() is not None:
+            else:
                 nearby = self.boat.nearby_city()
-                *_, explore_bounds = self._preview_layout(nearby)
-                if self._inside(nx, ny, explore_bounds):
+                if nearby is not None and self._inside(
+                    nx, ny, self._preview_layout(nearby)[-1],
+                ):
                     self.state.current_city = nearby
                     self.begin_transition(self.machine.enter_city)
+                elif .045 <= nx <= .14 and .37 <= ny <= .51:
+                    self.boat.nudge(-1)
+                elif .86 <= nx <= .955 and .37 <= ny <= .51:
+                    self.boat.nudge(1)
         elif self.state.mode == Mode.CITY:
             city_id = get_city(self.state.current_city)['id']
             for index, (px, py) in enumerate(FOOD_POSITIONS[city_id]):
@@ -871,6 +1012,13 @@ class App:
                 self._turn_atlas(-1)
             elif .67 <= nx <= .81 and .09 <= ny <= .17:
                 self._turn_atlas(1)
+        elif self.state.mode == Mode.SETTINGS:
+            if .64 <= nx <= .77 and .60 <= ny <= .69:
+                self._toggle_acceleration()
+            elif .40 <= nx <= .75 and .40 <= ny <= .48:
+                self._set_volume('master_volume', nx)
+            elif .40 <= nx <= .75 and .30 <= ny <= .38:
+                self._set_volume('effects_volume', nx)
         self.render()
 
     def on_pointer_press(self, x, y):
@@ -878,6 +1026,13 @@ class App:
         if self.state.mode != Mode.MAP or self.state.help_open or self.state.transition_locked:
             return
         nx, ny = x / CANVAS_WIDTH, y / CANVAS_HEIGHT
+        nearby = self.boat.nearby_city()
+        if nearby is not None and self._inside(
+            nx, ny, self._preview_layout(nearby)[-1],
+        ):
+            # The floating Explore button intentionally wins when the Suzhou
+            # card overlaps the forward throttle.
+            return
         direction = 0
         if .045 <= nx <= .14 and .37 <= ny <= .51:
             direction = -1
@@ -901,7 +1056,7 @@ def main(argv=None):
     import argparse
     import os
 
-    parser = argparse.ArgumentParser(description='运河四季·美食绘卷')
+    parser = argparse.ArgumentParser(description='运河风物志 Canal Delights')
     parser.add_argument(
         '--renderer', choices=[mode.value for mode in RenderMode],
         default=os.environ.get('CANAL_RENDERER', RenderMode.ACCELERATED.value),
