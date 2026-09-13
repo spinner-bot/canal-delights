@@ -1,45 +1,36 @@
+import struct
 import wave
 from io import BytesIO
-import threading
-import time
 
-from canal_delights.core.music import CANAL_THEME, ScorePlayer, synthesize_score
+from canal_delights.core.music import CANAL_SCORE, DEFAULT_BPM, FULL_SCALE, PROGRESSION, VOICES, note_frequency, render_canal_suite
 
 
-def test_score_is_embedded_and_synthesizes_valid_wav():
-    assert len(CANAL_THEME) >= 24
-    payload = synthesize_score(score=(('D4', .02), ('REST', .02)), bpm=120)
-    assert payload[:4] == b'RIFF'
+def _values(payload):
     with wave.open(BytesIO(payload), 'rb') as wav:
-        assert wav.getnchannels() == 1
-        assert wav.getsampwidth() == 2
-        assert wav.getframerate() == 22050
-        assert wav.getnframes() > 0
+        params = wav.getparams()
+        data = wav.readframes(wav.getnframes())
+    return params, struct.unpack(f'<{len(data) // 2}h', data)
 
 
-class FakeSound:
-    SND_MEMORY = 1
-
-    def __init__(self):
-        self.calls = []
-        self.playing = threading.Event()
-
-    def PlaySound(self, payload, flags):
-        self.calls.append((payload, flags))
-        self.playing.set()
-        time.sleep(.01)
+def test_score_is_complete_multivoice_composition():
+    assert {event.voice for event in CANAL_SCORE} >= {'melody', 'harmony', 'bass', 'drums'}
+    assert len(VOICES) >= 4
+    assert len(PROGRESSION[0]) == len(PROGRESSION[1]) == 4
+    assert max(event.start_beats + event.duration_beats for event in CANAL_SCORE) >= 127
+    assert note_frequency('A4') == 440.0
+    assert DEFAULT_BPM == 120
 
 
-def test_player_performs_in_memory_and_reacts_to_volume():
-    sound = FakeSound()
-    player = ScorePlayer(volume=.2, sound_module=sound)
-    assert player.start()
-    assert sound.playing.wait(1)
-    payload, flags = next(call for call in sound.calls if call[0] is not None)
-    assert payload[:4] == b'RIFF'
-    assert flags == sound.SND_MEMORY
+def test_stereo_pcm_is_safe_and_long_enough():
+    params, values = _values(render_canal_suite(sample_rate=3000, reverb='room'))
+    assert params.nchannels == 2 and params.sampwidth == 2
+    assert params.nframes / params.framerate >= 60
+    assert max(map(abs, values)) <= FULL_SCALE * .95
+    assert max(abs(a - b) for a, b in zip(values, values[1:])) < FULL_SCALE * .5
+    assert values[::2] != values[1::2]
 
-    player.set_volume(0)
-    assert player.volume == 0
-    player.stop()
-    assert not player.playing
+
+def test_effect_presets_and_voice_contracts_are_explicit():
+    assert render_canal_suite(sample_rate=2000, reverb='room') != render_canal_suite(sample_rate=2000, reverb='hall')
+    assert {'pluck', 'flute_fm', 'percussion'} <= {voice.timbre for voice in VOICES.values()}
+    assert all(0 <= voice.pan <= 1 and voice.attack >= 0 and voice.release >= 0 for voice in VOICES.values())
