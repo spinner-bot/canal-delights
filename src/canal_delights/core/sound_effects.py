@@ -105,8 +105,10 @@ def _design_effect(kind, left, right, sample_rate, strength):
             p = index / len(left)
             ripple=.72*sample_ring(broad,p)+.28*sample_ring(detail,p)
             breathe=.84+.16*(1-abs(2*((p*2)%1)-1))
-            left[index] += ripple*breathe*.105*strength
-            right[index] += (ripple*.84+sample_ring(detail,p)*.16)*breathe*.105*strength
+            # Water is an ambience bed: audible at crawl speed, but still
+            # multiplied by the boat-speed ratio before final output gain.
+            left[index] += ripple*breathe*.24*strength
+            right[index] += (ripple*.84+sample_ring(detail,p)*.16)*breathe*.24*strength
         for onset, pan in ((.17,.24),(.49,.72)):
             _add_karplus(left,right,sample_rate,onset,.18,260,.035*strength,pan,.987,0xA0B0+int(onset*100))
     elif kind == 'stamp':

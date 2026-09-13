@@ -33,6 +33,7 @@ def test_water_strength_tracks_boat_speed_ratio():
     q = struct.unpack(f'<{(len(quiet)-44)//2}h', quiet[44:])
     f = struct.unpack(f'<{(len(fast)-44)//2}h', fast[44:])
     assert sum(abs(v) for v in f) > sum(abs(v) for v in q) * 3
+    assert sum(abs(v) for v in q) > 0
 
 
 def test_effect_cache_is_invalidated_when_volume_changes():
