@@ -21,3 +21,9 @@ build/
 # OS
 .DS_Store
 Thumbs.db
+
+# Large media resources (keep local, not tracked)
+resource/
+
+# Generated embedded audio (regenerated from resource/)
+src/canal_delights/core/embedded_bgm.py
