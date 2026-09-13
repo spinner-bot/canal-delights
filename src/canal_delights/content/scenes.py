@@ -26,6 +26,30 @@ def _water(phase: float) -> list:
     return data
 
 
+def _atmosphere(city_id: str, phase: float) -> list:
+    """Low-contrast depth layers shared by every city vignette."""
+    haze = .0025 * math.sin(phase * .7)
+    palettes = {
+        'beijing': (rgb(177, 153, 135), rgb(126, 101, 91)),
+        'tianjin': (rgb(166, 178, 180), rgb(102, 122, 130)),
+        'yangzhou': (rgb(179, 177, 143), rgb(112, 130, 104)),
+        'suzhou': (rgb(168, 181, 171), rgb(91, 113, 108)),
+        'hangzhou': (rgb(174, 188, 157), rgb(95, 128, 103)),
+    }
+    far, near = palettes[city_id]
+    data = [
+        ['B', [[.07,.39+haze],[.20,.33],[.34,.385],[.48,.31],[.63,.37],[.79,.30],[.93,.36]],
+         {'stroke': far, 'stroke_width': 18}],
+        ['R', [.09,.345,.82,.028], {'fill': near}],
+        ['R', [.10,.355,.80,.012], {'fill': rgb(205, 203, 177)}],
+    ]
+    # A few quiet window lights give the skyline scale without competing with
+    # the food markers in the foreground.
+    for x, y in ((.16,.365),(.23,.35),(.31,.37),(.72,.35),(.80,.365),(.87,.345)):
+        data.append(['R', [x, y, .014, .010], {'fill': rgb(224, 189, 111)}])
+    return data
+
+
 def _beijing(theme, phase):
     roof = rgb(137, 48, 39)
     gold = rgb(202, 159, 62)
@@ -160,6 +184,7 @@ def get_city_scene(city_id: str, theme, phase: float, gradient_steps: int = 12) 
         ['B', [[.10,.68],[.19,.73],[.25,.65],[.34,.69]], {'stroke': rgb(207, 207, 185), 'stroke_width': 5}],
         ['B', [[.68,.73],[.75,.77],[.82,.70],[.90,.74]], {'stroke': rgb(215, 209, 185), 'stroke_width': 4}],
     ]
+    data.extend(_atmosphere(city_id, phase))
     data.extend(_water(phase))
     data.extend(SCENE_BUILDERS[city_id](theme, phase))
     # Foreground reeds and ripple strokes add a final depth plane.

@@ -8,9 +8,12 @@ from ...config import rgb, make_style, linear_gradient, radial_gradient
 # 通用盘子
 def plate_drawing(cx, cy, r):
     return [
-        ['E', [cx, cy - 0.02, r * 1.2, r * 0.3], {'fill': rgb(180, 180, 180)}],  # 阴影
-        ['C', [cx, cy, r], {'fill': rgb(240, 240, 240), 'stroke': rgb(200, 200, 200), 'stroke_width': 2}],
-        ['C', [cx, cy, r * 0.9], {'stroke': rgb(220, 220, 220), 'stroke_width': 1}],
+        # Layered ceramic plate: shadow, warm rim, inner well and highlight.
+        ['E', [cx, cy - 0.025, r * 1.22, r * 0.32], {'fill': rgb(177, 166, 151)}],
+        ['C', [cx, cy, r * 1.04], {'fill': rgb(226, 220, 204), 'stroke': rgb(177, 153, 119), 'stroke_width': 1}],
+        ['C', [cx, cy, r], {'fill': rgb(248, 245, 232), 'stroke': rgb(196, 186, 166), 'stroke_width': 2}],
+        ['C', [cx, cy + 0.005, r * 0.88], {'stroke': rgb(218, 205, 179), 'stroke_width': 1}],
+        ['E', [cx - r * .32, cy + r * .28, r * .18, r * .055], {'fill': rgb(255, 252, 241)}],
     ]
 
 
