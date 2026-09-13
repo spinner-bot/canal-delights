@@ -888,8 +888,10 @@ class App:
         }
         mode_name = mode_names.get(self.state.mode, '未知')
         data = [
-            ['T', [0.95, 0.05, f'[{mode_name}]'], {'font_size': 10, 'color': rgb(180, 180, 180), 'align': 'right'}],
-            ['T', [0.95, 0.085, f'FPS：{round(self._fps):02d}'], {'font_size': 9, 'color': rgb(180, 180, 180), 'align': 'right'}],
+            ['T', [0.95, 0.065, f'FPS: {round(self._fps):02d}  [{mode_name}]'], {
+                'font_size': 12, 'font_weight': 'bold',
+                'color': rgb(116, 93, 64), 'align': 'right',
+            }],
         ]
         self.parser.parse(data, self.bounds)
 
