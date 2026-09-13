@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import base64
 import io
-import textwrap
 import zipfile
 from pathlib import Path
 
@@ -25,6 +24,12 @@ def make_archive() -> bytes:
 
 def main() -> None:
     payload = base64.b64encode(make_archive()).decode('ascii')
+    # Keep the generated source navigable: the large resource is at the end
+    # and split into manageable adjacent string literals.
+    chunks = '\n'.join(
+        f'    {payload[index:index + 4096]!r}'
+        for index in range(0, len(payload), 4096)
+    )
     source = f'''"""Canal Delights 单文件发行版。运行：python 此文件.py"""
 
 import base64
@@ -33,17 +38,18 @@ import tempfile
 import zipfile
 from pathlib import Path
 
-_PACKAGE_ZIP_B64 = (
-    {payload!r}
-)
-
-
 def _run() -> None:
     archive_path = Path(tempfile.gettempdir()) / 'canal_delights_embedded.zip'
     archive_path.write_bytes(base64.b64decode(_PACKAGE_ZIP_B64))
     sys.path.insert(0, str(archive_path))
     from canal_delights.app import main
     main()
+
+
+# The embedded package/audio payload is intentionally kept at the end.
+_PACKAGE_ZIP_B64 = (
+{chunks}
+)
 
 
 if __name__ == '__main__':
