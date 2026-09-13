@@ -33,13 +33,14 @@ class DrawingEngine:
 
     def __init__(self, width: int = 1200, height: int = 800):
         self.mode_name = 'pure'
+        self.supports_acceleration = False
         self.width = width
         self.height = height
 
         # 初始化 Turtle 屏幕
         self.screen = turtle.Screen()
         self.screen.setup(width, height)
-        self.screen.title("运河四季·美食绘卷")
+        self.screen.title("运河风物志 Canal Delights")
         self.screen.tracer(0, 0)  # 关闭自动刷新，手动控制
 
         # 设置坐标系：(0,0) 在左下角，(width,height) 在右上角
